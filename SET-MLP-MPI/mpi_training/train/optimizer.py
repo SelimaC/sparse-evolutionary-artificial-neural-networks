@@ -4,6 +4,7 @@ import numpy as np
 from numba import njit
 import logging
 import scipy.sparse as sparse
+from scipy.sparse import coo_matrix
 
 class Optimizer(object):
     """Base class for optimization algorithms.
@@ -35,10 +36,8 @@ class VanillaSGD(Optimizer):
             dw = v[0]
             delta = v[1]
 
-            # try:
-            #     dw = retain_valid_updates(weights['w'][index], dw)
-            # except:
-            #     return weights
+            dw = retain_valid_updates(weights['w'][index], dw)
+
 
             weights['pdw'][index] = - self.learning_rate * dw
             weights['pdd'][index] = - self.learning_rate * delta
@@ -67,10 +66,7 @@ class MomentumSGD(Optimizer):
             dw = v[0]
             delta = v[1]
 
-            # try:
-            #     dw = retain_valid_updates(weights['w'][index], dw)
-            # except:
-            #     return weights
+            dw = retain_valid_updates(weights['w'][index], dw)
 
             # perform the update with momentum
             if index not in weights['pdw']:
@@ -200,33 +196,58 @@ def get_optimizer(name):
             }
     return lookup[name]
 
+def array_intersect(A, B):
+    # this are for array intersection
+    nrows, ncols = A.shape
+    dtype = {'names': ['f{}'.format(i) for i in range(ncols)], 'formats': ncols * [A.dtype]}
+    return np.in1d(A.view(dtype), B.view(dtype), assume_unique=True)  # boolean return
 
-@njit(fastmath=True)
+
+def retain_valid_updates_II(weights, gradient):
+    weights = weights.tocoo()
+    gradient = gradient.tocoo()
+
+    valsPD, rowsPD, colsPD = gradient.data, gradient.row, gradient.col
+
+    weights_indices = np.stack((weights.row, weights.col), axis=-1)
+    gradient_indices = np.stack((rowsPD, colsPD), axis=-1)
+    indices = array_intersect(gradient_indices, weights_indices)
+
+    valsPDNew = valsPD[indices]
+    rowsPDNew = rowsPD[indices]
+    colsPDNew = colsPD[indices]
+
+    gradient = coo_matrix((valsPDNew, (rowsPDNew, colsPDNew)), gradient.shape).tocsr()
+
+    return gradient
+
+
 def retain_valid_updates(weights, gradient):
     cols = gradient.shape[1]
-    Ia, Ja, Va = sparse.find(weights)
-    Ib, Jb, Vb = sparse.find(gradient)
-    Ka = np.array(Ia * cols + Ja)
-    Kb = np.array(Ib * cols + Jb)
+    weights = weights.tocoo()
+    gradient = gradient.tocoo()
+    K_weights = np.array(weights.row * cols + weights.col)
+    K_gradient = np.array(gradient.row * cols + gradient.col)
 
-    indices = np.setdiff1d(Kb, Ka, assume_unique=True)
+    indices = np.setdiff1d(K_gradient, K_weights, assume_unique=True)
     if len(indices) != 0:
         rows, cols = np.unravel_index(indices, gradient.shape)
+        gradient = gradient.tocsr()
         gradient[rows, cols] = 0
         gradient.eliminate_zeros()
 
     return gradient
 
 
-@njit(fastmath=True)
 def retain_valid_weights(correct_weights, new_weights):
     cols = new_weights.shape[1]
-    Ia, Ja, Va = sparse.find(correct_weights)
-    Ib, Jb, Vb = sparse.find(new_weights)
-    Ka = Ia * cols + Ja
-    Kb = Ib * cols + Jb
+    correct_weights = coo_matrix(correct_weights, dtype='float32')
+    new_weights = coo_matrix(new_weights, dtype='float32')
 
-    indices = np.setdiff1d(Kb, Ka, assume_unique=True)
+    K_correct_weights = np.array(correct_weights.row * cols + correct_weights.col)
+    K_new_weights = np.array(new_weights.row * cols + new_weights.col)
+
+    indices = np.setdiff1d(K_new_weights, K_correct_weights, assume_unique=True)
     if len(indices) != 0:
         rows, cols = np.unravel_index(indices, new_weights.shape)
         correct_weights = correct_weights.tolil()

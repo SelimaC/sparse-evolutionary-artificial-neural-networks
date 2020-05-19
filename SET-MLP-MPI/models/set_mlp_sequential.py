@@ -92,9 +92,11 @@ def compute_accuracy(activations, y_test):
 @njit(fastmath=True, cache=True)
 def dropout(x, rate):
     noise_shape = x.shape
-    keep_prob = 1 - rate
-    noise = np.random.binomial(1, keep_prob, noise_shape) / np.float32(keep_prob)
-    return x * noise, noise
+    noise = np.random.uniform(0., 1., noise_shape)
+    keep_prob = 1. - rate
+    scale = np.float32(1 / keep_prob)
+    keep_mask = noise >= rate
+    return x * scale * keep_mask, keep_mask
 
 
 def createSparseWeights(epsilon, noRows, noCols):
@@ -235,7 +237,7 @@ class SET_MLP:
         """
         keep_prob = 1.
         if self.dropout_rate > 0:
-            keep_prob = 1. - self.dropout_rate
+            keep_prob = np.float32(1. - self.dropout_rate)
 
         # Determine partial derivative and delta for the output layer.
         # delta output layer
@@ -259,6 +261,7 @@ class SET_MLP:
             if keep_prob != 1:
                 delta = (delta @ self.w[i].transpose()) * self.activations[i].prime(z[i])
                 delta = delta * masks[i]
+                delta /= keep_prob
             else:
                 delta = (delta @ self.w[i].transpose()) * self.activations[i].prime(z[i])
 

@@ -209,7 +209,10 @@ if __name__ == '__main__':
         histories = manager.process.train()
         delta_t = time() - t_0
         manager.free_comms()
+        logging.info("Testing time is {0:.3f} seconds".format(manager.process.validate_time))
+        delta_t -= manager.process.validate_time
         logging.info("Training finished in {0:.3f} seconds".format(delta_t))
+        logging.info("Evolution time is {0:.3f} seconds".format(manager.process.evolution_time))
 
         logging.info("------------------------------------------------------------------------------------------------")
         logging.info("Final performance of the model on the test dataset")

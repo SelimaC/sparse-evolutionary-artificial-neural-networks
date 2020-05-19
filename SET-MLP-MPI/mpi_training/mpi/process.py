@@ -55,6 +55,8 @@ class MPIProcess(object):
         self.model = model
         self.save_filename = save_filename
         self.idle_time = 0.0
+        self.validate_time = 0.0
+        self.evolution_time = 0.0
 
         self.gradients = None
         self.update = None
@@ -588,6 +590,7 @@ class MPIMaster(MPIProcess):
                                 #self.model.model.weightsEvolution_III()
                                 t6 = datetime.datetime.now()
                                 self.logger.info(f"Weights evolution time  {t6 - t5}")
+                                self.evolution_time += (t6 - t5).seconds
 
                             self.weights = self.model.get_weights()
                             self.logger.info(f"Master epoch {self.epoch + 1}")
@@ -604,11 +607,12 @@ class MPIMaster(MPIProcess):
                             self.biases_to_save.append(self.weights['b'])
 
                             self.validate(self.weights)
-                            if self.epoch < self.num_epochs//(self.num_workers) - 1:
+                            if self.epoch < self.num_epochs - 1:
                                 t5 = datetime.datetime.now()
-                                #self.model.weight_evolution()
+                                self.model.weight_evolution()
                                 t6 = datetime.datetime.now()
                                 self.logger.info(f"Weights evolution time  {t6 - t5}")
+                                self.evolution_time += (t6 - t5).seconds
                                 self.weights = self.model.get_weights()
 
                             self.logger.info(f"Master epoch {self.epoch+1}")
@@ -755,6 +759,8 @@ class MPIMaster(MPIProcess):
         self.logger.info(f"Testing time: {t4 - t3}\n; Loss test: {loss_test}; \n"
                           f" Accuracy test: {accuracy_test}; \n"
                           f"Maximum accuracy val: {self.best_val_acc}")
+
+        self.validate_time += (t4 - t3).seconds
 
         # save performance metrics values in a file
         if (self.save_filename != ""):

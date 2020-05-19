@@ -337,10 +337,10 @@ class SET_MLP:
                 rowsW = wcoo.row
                 colsW = wcoo.col
 
-                # pdcoo = self.pdw[i].tocoo()
-                # valsPD = pdcoo.data
-                # rowsPD = pdcoo.row
-                # colsPD = pdcoo.col
+                pdcoo = self.pdw[i].tocoo()
+                valsPD = pdcoo.data
+                rowsPD = pdcoo.row
+                colsPD = pdcoo.col
 
                 # print("Number of non zeros in W and PD matrix before evolution in layer",i,[np.size(valsW), np.size(valsPD)])
                 values = np.sort(self.w[i].data)
@@ -356,17 +356,17 @@ class SET_MLP:
                 rowsWNew = rowsW[(valsW > smallestPositive) | (valsW < largestNegative)]
                 colsWNew = colsW[(valsW > smallestPositive) | (valsW < largestNegative)]
 
-                # newWRowColIndex = np.stack((rowsWNew, colsWNew), axis=-1)
-                # oldPDRowColIndex = np.stack((rowsPD, colsPD), axis=-1)
-                #
-                # newPDRowColIndexFlag = array_intersect(oldPDRowColIndex, newWRowColIndex)  # careful about order
-                #
-                # valsPDNew = valsPD[newPDRowColIndexFlag]
-                # rowsPDNew = rowsPD[newPDRowColIndexFlag]
-                # colsPDNew = colsPD[newPDRowColIndexFlag]
+                newWRowColIndex = np.stack((rowsWNew, colsWNew), axis=-1)
+                oldPDRowColIndex = np.stack((rowsPD, colsPD), axis=-1)
 
-                # self.pdw[i] = coo_matrix((valsPDNew, (rowsPDNew, colsPDNew)),
-                #                          (self.dimensions[i - 1], self.dimensions[i]), dtype='float32').tocsr()
+                newPDRowColIndexFlag = array_intersect(oldPDRowColIndex, newWRowColIndex)  # careful about order
+
+                valsPDNew = valsPD[newPDRowColIndexFlag]
+                rowsPDNew = rowsPD[newPDRowColIndexFlag]
+                colsPDNew = colsPD[newPDRowColIndexFlag]
+
+                self.pdw[i] = coo_matrix((valsPDNew, (rowsPDNew, colsPDNew)),
+                                         (self.dimensions[i - 1], self.dimensions[i]), dtype='float32').tocsr()
 
                 # add new random connections
                 keepConnections = np.size(rowsWNew)
@@ -409,8 +409,8 @@ class SET_MLP:
                 # t_ev_2 = datetime.datetime.now()
                 # print("Weights evolution time for layer",i,"is", t_ev_2 - t_ev_1)
 
-        self.pdw = {}
-        self.pdd = {}
+        # self.pdw = {}
+        # self.pdd = {}
 
     def weightsEvolution_III(self):
         # this represents the core of the SET procedure. It removes the weights closest to zero in each layer and add new random weights
