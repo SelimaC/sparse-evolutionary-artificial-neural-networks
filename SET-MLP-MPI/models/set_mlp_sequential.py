@@ -102,12 +102,14 @@ def dropout(x, rate):
 def createSparseWeights(epsilon, noRows, noCols):
     limit = np.sqrt(6. / float(noRows + noCols))
 
+    mask_weights = np.random.rand(noRows, noCols)
+    prob = 1 - (epsilon * (noRows + noCols)) / (noRows * noCols)  # normal tp have 8x connections
     # generate an Erdos Renyi sparse weights mask
-    weights = lil_matrix((noRows, noCols), dtype='float32')
-    for i in range(epsilon * (noRows + noCols)):
-        weights[np.random.randint(0, noRows), np.random.randint(0, noCols)] = np.float32(np.random.uniform(-limit, limit))
+    weights = lil_matrix((noRows, noCols))
+    n_params = np.count_nonzero(mask_weights[mask_weights >= prob])
+    weights[mask_weights >= prob] = np.random.uniform(-limit, limit, n_params)
     print("Create sparse matrix with ", weights.getnnz(), " connections and ",
-          (weights.getnnz() / (noRows * noCols)) * 100, "% density level")
+           (weights.getnnz() / (noRows * noCols)) * 100, "% density level")
     weights = weights.tocsr()
     return weights
 
@@ -297,8 +299,8 @@ class SET_MLP:
             self.pdw[index] = self.momentum * self.pdw[index] - self.learning_rate * dw
             self.pdd[index] = self.momentum * self.pdd[index] - self.learning_rate * delta
 
-        self.w[index] += self.pdw[index]  # - self.weight_decay * self.w[index]
-        self.b[index] += self.pdd[index]  # - self.weight_decay * self.b[index]
+        self.w[index] += self.pdw[index] - self.weight_decay * self.w[index]
+        self.b[index] += self.pdd[index] - self.weight_decay * self.b[index]
 
     def train_on_batch(self, x, y):
         z, a, masks = self._feed_forward(x, True)
@@ -407,7 +409,7 @@ class SET_MLP:
         """
         if not x.shape[0] == y_true.shape[0]:
             raise ValueError("Length of x and y arrays don't match")
-        x = x.reshape(-1, 32, 32, 3)
+
         # data augmentation
         datagen = ImageDataGenerator(
             featurewise_center=False,  # set input mean to 0 over the dataset
@@ -432,8 +434,9 @@ class SET_MLP:
         metrics = np.zeros((self.epochs, 4))
         weights = []
         biases = []
-        output_generator = datagen.flow(x, y_true, batch_size=self.batch_size)
+
         for i in range(self.epochs):
+            output_generator = datagen.flow(x, y_true, batch_size=self.batch_size)
             t1 = datetime.datetime.now()
             for j in range(x.shape[0] // self.batch_size):
                 x_b, y_b = next(output_generator)
@@ -447,7 +450,7 @@ class SET_MLP:
             # this part is useful to understand model performance and can be commented for production settings
             if (testing):
                 t3 = datetime.datetime.now()
-                accuracy_test, activations_test = self.predict(x_test, y_test)
+                accuracy_test, activations_test = self.predict(x_test.reshape(-1, 32 * 32 * 3), y_test)
                 accuracy_train, activations_train = self.predict(x.reshape(-1, 32 * 32 * 3), y_true)
                 t4 = datetime.datetime.now()
                 maximum_accuracy = max(maximum_accuracy, accuracy_test)

@@ -4,15 +4,27 @@ import numpy as np
 class Relu:
     @staticmethod
     def activation(z):
-        z[z < 0] = 0.
+        z[z < 0] = 0
         return z
 
     @staticmethod
     def prime(z):
-        z[z < 0] = 0.
-        z[z > 0] = 1.
+        z[z < 0] = 0
+        z[z > 0] = 1
         return z
 
+
+class LeakyRelu:
+    @staticmethod
+    def activation(z):
+        z[z < 0] *= 0.01
+        return z
+
+    @staticmethod
+    def prime(z):
+        z[z < 0] = 0.01
+        z[z > 0] = 1
+        return z
 
 class Sigmoid:
     @staticmethod
