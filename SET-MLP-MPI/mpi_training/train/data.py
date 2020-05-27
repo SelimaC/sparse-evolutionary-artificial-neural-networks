@@ -2,7 +2,8 @@
 
 import numpy as np
 import logging
-
+from keras.preprocessing.image import ImageDataGenerator
+from utils.filters import *
 
 class Data(object):
     """Class providing an interface to the input training and testing data.
@@ -14,12 +15,45 @@ class Data(object):
           batch_size: size of training batches
     """
 
-    def __init__(self, x_train, y_train, x_test, y_test, batch_size):
+    def __init__(self, x_train, y_train, x_test, y_test, batch_size, augmentation=False):
         self.x_train = x_train
         self.y_train = y_train
         self.x_test = x_test
         self.y_test = y_test
         self.batch_size = batch_size
+
+        if augmentation:
+            self.datagen = ImageDataGenerator(
+                featurewise_center=False,  # set input mean to 0 over the dataset
+                samplewise_center=False,  # set each sample mean to 0
+                featurewise_std_normalization=False,  # divide inputs by std of the dataset
+                samplewise_std_normalization=False,  # divide each input by its std
+                zca_whitening=False,  # apply ZCA whitening
+                zca_epsilon=1e-06,  # epsilon for ZCA whitening
+                rotation_range=0,  # randomly rotate images in the range (degrees, 0 to 180)
+                # randomly shift images horizontally (fraction of total width)
+                width_shift_range=0.1,
+                # randomly shift images vertically (fraction of total height)
+                height_shift_range=0.1,
+                shear_range=0.,  # set range for random shear
+                zoom_range=0.,  # set range for random zoom
+                channel_shift_range=0.,  # set range for random channel shifts
+                # set mode for filling points outside the input boundaries
+                fill_mode='nearest',
+                cval=0.,  # value used for fill_mode = "constant"
+                horizontal_flip=True,  # randomly flip images
+                vertical_flip=False,  # randomly flip images
+                # set rescaling factor (applied before any other transformation)
+                rescale=None,
+                # set function that will be applied on each input
+                preprocessing_function=None,
+                # image data format, either "channels_first" or "channels_last"
+                data_format=None,
+                # fraction of images reserved for validation (strictly between 0 and 1)
+                validation_split=0.0)
+            self.datagen.fit(self.x_train)
+        else:
+            self.datagen = None
 
     def inf_generate_data(self):
         while True:
@@ -30,12 +64,17 @@ class Data(object):
                 logging.warning("start over generator loop")
 
     def generate_data(self):
-        """Yields batches of training data until none are left."""
+        """Yields batches of augmented training data until none are left."""
+        output_generator = self.datagen.flow(self.x_train, self.y_train, batch_size=self.batch_size)
         for j in range(self.x_train.shape[0] // self.batch_size):
-            start_pos = j * self.batch_size
-            end_pos = (j + 1) * self.batch_size
+            x_b, y_b = next(output_generator)
+            x_b = x_b.reshape(-1, 32 * 32 * 3)
 
-            yield self.x_train[start_pos:end_pos], self.y_train[start_pos:end_pos]
+            yield x_b, y_b
+
+    def get_filters(self, img):
+        median_image, unsharp_image, gray_segmentation, laplacian_image = get_filtered_versions(img)
+        return np.hstack((img, median_image, unsharp_image, gray_segmentation, laplacian_image))
 
     def generate_test_data(self):
         """Yields batches of training data until none are left."""

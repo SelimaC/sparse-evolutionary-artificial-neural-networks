@@ -109,6 +109,9 @@ def load_cifar10_data(n_training_samples, n_testing_samples):
     x_train = (x_train - x_train_mean) / x_train_std
     x_test = (x_test - x_train_mean) / x_train_std
 
+    x_train = x_train.reshape(-1, 32 * 32 * 3)
+    x_test = x_test.reshape(-1, 32 * 32 * 3)
+
     return x_train, y_train, x_test, y_test
 
 
@@ -142,6 +145,7 @@ def load_cifar10_data_not_flattened(n_training_samples, n_testing_samples):
     x_test = (x_test - x_train_mean) / x_train_std
 
     return x_train, y_train, x_test, y_test
+
 
 def load_images(curr_dir, label):
     print(f"Loading class {label} images ...")

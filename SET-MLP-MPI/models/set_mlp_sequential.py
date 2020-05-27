@@ -99,7 +99,7 @@ def dropout(x, rate):
     return x * scale * keep_mask, keep_mask
 
 
-def createSparseWeights(epsilon, noRows, noCols):
+def createSparseWeights_II(epsilon, noRows, noCols):
     limit = np.sqrt(6. / float(noRows + noCols))
 
     mask_weights = np.random.rand(noRows, noCols)
@@ -111,6 +111,16 @@ def createSparseWeights(epsilon, noRows, noCols):
     print("Create sparse matrix with ", weights.getnnz(), " connections and ",
            (weights.getnnz() / (noRows * noCols)) * 100, "% density level")
     weights = weights.tocsr()
+    return weights
+
+
+def createSparseWeights(epsilon,noRows,noCols):
+    # generate an Erdos Renyi sparse weights mask
+    weights=lil_matrix((noRows, noCols))
+    for i in range(epsilon * (noRows + noCols)):
+        weights[np.random.randint(0,noRows),np.random.randint(0,noCols)]=np.float64(np.random.randn()/10)
+    print ("Create sparse matrix with ",weights.getnnz()," connections and ",(weights.getnnz()/(noRows * noCols))*100,"% density level")
+    weights=weights.tocsr()
     return weights
 
 
@@ -159,16 +169,16 @@ class SET_MLP:
         self.pdd = {}
         self.activations = {}
 
-        for i in range(len(dimensions) - 2):
+        for i in range(len(dimensions) - 1):
             self.w[i + 1] = createSparseWeights(self.epsilon, dimensions[i], dimensions[i + 1])  #create sparse weight matrices
             self.b[i + 1] = np.zeros(dimensions[i + 1], dtype='float32')
             self.activations[i + 2] = activations[i]
 
-        limit = np.sqrt(6. / float(dimensions[-2] + dimensions[-1]))
-        self.w[len(dimensions) - 1] = csr_matrix(np.random.uniform(-limit, limit,
-                                                                   (dimensions[-2], dimensions[-1])), dtype='float32')
-        self.b[len(dimensions) - 1] = np.zeros(dimensions[-1], dtype='float32')
-        self.activations[len(dimensions)] = activations[-1]
+        # limit = np.sqrt(6. / float(dimensions[-2] + dimensions[-1]))
+        # self.w[len(dimensions) - 1] = csr_matrix(np.random.uniform(-limit, limit,
+        #                                                            (dimensions[-2], dimensions[-1])), dtype='float32')
+        # self.b[len(dimensions) - 1] = np.zeros(dimensions[-1], dtype='float32')
+        # self.activations[len(dimensions)] = activations[-1]
 
         if config['loss'] == 'mse':
             self.loss = MSE(self.activations[self.n_layers])
@@ -417,11 +427,28 @@ class SET_MLP:
             featurewise_std_normalization=False,  # divide inputs by std of the dataset
             samplewise_std_normalization=False,  # divide each input by its std
             zca_whitening=False,  # apply ZCA whitening
-            rotation_range=10,  # randomly rotate images in the range (degrees, 0 to 180)
-            width_shift_range=0.1,  # randomly shift images horizontally (fraction of total width)
-            height_shift_range=0.1,  # randomly shift images vertically (fraction of total height)
+            zca_epsilon=1e-06,  # epsilon for ZCA whitening
+            rotation_range=0,  # randomly rotate images in the range (degrees, 0 to 180)
+            # randomly shift images horizontally (fraction of total width)
+            width_shift_range=0.1,
+            # randomly shift images vertically (fraction of total height)
+            height_shift_range=0.1,
+            shear_range=0.,  # set range for random shear
+            zoom_range=0.,  # set range for random zoom
+            channel_shift_range=0.,  # set range for random channel shifts
+            # set mode for filling points outside the input boundaries
+            fill_mode='nearest',
+            cval=0.,  # value used for fill_mode = "constant"
             horizontal_flip=True,  # randomly flip images
-            vertical_flip=False)  # randomly flip images
+            vertical_flip=False,  # randomly flip images
+            # set rescaling factor (applied before any other transformation)
+            rescale=None,
+            # set function that will be applied on each input
+            preprocessing_function=None,
+            # image data format, either "channels_first" or "channels_last"
+            data_format=None,
+            # fraction of images reserved for validation (strictly between 0 and 1)
+            validation_split=0.0)
         datagen.fit(x)
 
         # Initiate the loss object with the final activation function
@@ -546,7 +573,7 @@ class SET_MLP:
     def weightsEvolution_II(self):
         # this represents the core of the SET procedure. It removes the weights closest to zero in each layer and add new random weights
         # improved running time using numpy routines - Amarsagar Reddy Ramapuram Matavalam (amar@iastate.edu)
-        for i in range(1, self.n_layers-1):
+        for i in range(1, self.n_layers):
             # uncomment line below to stop evolution of dense weights more than 80% non-zeros
             #if(self.w[i].count_nonzero()/(self.w[i].get_shape()[0]*self.w[i].get_shape()[1]) < 0.8):
                 t_ev_1 = datetime.datetime.now()

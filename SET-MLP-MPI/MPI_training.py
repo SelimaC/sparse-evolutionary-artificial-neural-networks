@@ -54,7 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', help='Mode of operation.'
                         'One of "sgd" (Stohastic Gradient Descent), "sgdm" (Stohastic Gradient Descent with Momentum),'
                         '"easgd" (Elastic Averaging SGD) or "gem" (Gradient Energy Matching)',
-                        default='sgdm')
+                        default='easgd')
     parser.add_argument('--elastic-force', help='beta parameter for EASGD', type=float, default=0.9)
     parser.add_argument('--elastic-lr', help='worker SGD learning rate for EASGD',
                         type=float, default=1.0, dest='elastic_lr')
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     parser.add_argument('--momentum', type=float, default=0.9, help='SGD momentum (default: 0.5)')
     parser.add_argument('--dropout-rate', type=float, default=0.3, help='Dropout rate')
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Dropout rate')
-    parser.add_argument('--epsilon', type=int, default=20, help='Sparsity level')
+    parser.add_argument('--epsilon', type=int, default=30, help='Sparsity level')
     parser.add_argument('--zeta', type=float, default=0.3,
                         help='It gives the percentage of unimportant connections which are removed and replaced with '
                              'random ones after every epoch(in [0..1])')
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     num_workers = num_processes - 1
 
     # Initialize logger
-    base_file_name = "Results2/sgdm_set_mlp_mpi_fashionmnist_" + str(args.n_training_samples) + "_training_samples_e" + \
+    base_file_name = "Results2/easgd_set_mlp_mpi_cifar10_" + str(args.n_training_samples) + "_training_samples_e" + \
                     str(args.epsilon) + "_rand" + str(1) + "_num_workers_" + str(num_workers)
     log_file = base_file_name + "_logs_execution.txt"
 
@@ -122,7 +122,7 @@ if __name__ == '__main__':
 
     if num_processes == 1:
         # Load dataset
-        X_train, Y_train, X_test, Y_test = load_fashion_mnist_data(args.n_training_samples, args.n_testing_samples)
+        X_train, Y_train, X_test, Y_test = load_cifar10_data(args.n_training_samples, args.n_testing_samples)
         validate_every = int(X_train.shape[0] // args.batch_size)
         data = Data(batch_size=args.batch_size,
                     x_train=X_train, y_train=Y_train,
@@ -139,7 +139,7 @@ if __name__ == '__main__':
 
             # Load normal dataset
 
-            X_train, Y_train, X_test, Y_test = load_fashion_mnist_data(args.n_training_samples,
+            X_train, Y_train, X_test, Y_test = load_cifar10_data(args.n_training_samples,
                                                                                args.n_testing_samples)
             validate_every = int(X_train.shape[0] // args.batch_size)
             partitions = shared_partitions(X_train.shape[0], num_workers, args.batch_size)
@@ -153,7 +153,7 @@ if __name__ == '__main__':
             # X_test = np.load('mpi_training/cifar10/x_test.npy', mmap_mode='r')
             # Y_test = np.load('mpi_training/cifar10/y_test.npy', mmap_mode='r')
 
-            X_train, Y_train,  X_test, Y_test = load_fashion_mnist_data(args.n_training_samples, args.n_testing_samples)
+            X_train, Y_train,  X_test, Y_test = load_cifar10_data(args.n_training_samples, args.n_testing_samples)
 
             validate_every = int(X_train.shape[0] // args.batch_size)
             data = Data(batch_size=args.batch_size,
@@ -179,10 +179,10 @@ if __name__ == '__main__':
         algo = Algo(optimizer='sgd', validate_every=validate_every, lr=args.lr, sync_every=args.sync_every)
 
     # Model architecture cifar10
-    #dimensions = (3072, 4000, 1000, 4000, 10)
+    dimensions = (3072, 4000, 1000, 4000, 10)
 
     # Model architecture mnist
-    dimensions = (784, 1000, 1000, 1000, 10)
+    #dimensions = (784, 1000, 1000, 1000, 10)
 
     # Model architecture higgs
     # dimensions = (28, 1000, 1000, 1000, 2)

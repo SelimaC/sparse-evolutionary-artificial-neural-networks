@@ -3,6 +3,8 @@ import time
 import argparse
 import os
 from utils.load_data import *
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+
 
 # **** change the warning level ****
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -13,7 +15,7 @@ parser.add_argument('--batch-size', type=int, default=100, metavar='N',
                     help='input batch size for training (default: 64)')
 parser.add_argument('--test-batch-size', type=int, default=3000, metavar='N',
                     help='input batch size for testing (default: 1000)')
-parser.add_argument('--epochs', type=int, default=50, metavar='N',
+parser.add_argument('--epochs', type=int, default=1000, metavar='N',
                     help='number of epochs to train (default: 10)')
 parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                     help='learning rate (default: 0.01)')
@@ -97,15 +99,20 @@ if __name__ == "__main__":
         # Load basic cifar10 dataset
         # X_train, Y_train, X_test, Y_test = load_cifar10_data(n_training_samples, n_testing_samples)
 
+        X_train = joblib.load('../data/CIFAR10/x_train_features.joblib')
+        X_test = joblib.load('../data/CIFAR10/x_test_features.joblib')
+        Y_train = joblib.load('../data/CIFAR10/y_train_features.joblib')
+        Y_test = joblib.load('../data/CIFAR10/y_test_features.joblib')
+
         # Create SET-MLP (MLP with adaptive sparse connectivity trained with Sparse Evolutionary Training)
         print("Number of neurons per layer:", X_train.shape[1], n_hidden_neurons, n_hidden_neurons,
-        n_hidden_neurons, Y_train.shape[1])
+              n_hidden_neurons, Y_train.shape[1])
 
-        set_mlp = SET_MLP((X_train.shape[1], 4000, 1000, 4000,
-                           Y_train.shape[1]), (Relu, Relu, Relu, Softmax), **config)
+        set_mlp = SET_MLP((X_train.shape[1], 12000, 4000, 12000, 4000, 12000, 4000, 12000, 4000, 12000, 10),
+                          (Relu, NoActivation, Relu, NoActivation, Relu, NoActivation, Relu, NoActivation, Relu, Softmax), **config)
         start_time = time.time()
         set_mlp.fit(X_train, Y_train, X_test, Y_test, testing=True,
-                    save_filename=r"Results2/fast2_set_mlp_sequential_cifar10_" +
+                    save_filename=r"Results2/grey_set_mlp_sequential_cifar10_" +
                                   str(n_training_samples) + "_training_samples_e" + str(
                         epsilon) + "_rand" + str(i))
         step_time = time.time() - start_time

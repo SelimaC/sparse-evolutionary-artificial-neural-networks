@@ -66,7 +66,7 @@ class MomentumSGD(Optimizer):
             dw = v[0]
             delta = v[1]
 
-            dw = retain_valid_updates(weights['w'][index], dw)
+            #dw = retain_valid_updates(weights['w'][index], dw)
 
             # perform the update with momentum
             if index not in weights['pdw']:
@@ -241,8 +241,8 @@ def retain_valid_updates(weights, gradient):
 
 def retain_valid_weights(correct_weights, new_weights):
     cols = new_weights.shape[1]
-    correct_weights = coo_matrix(correct_weights, dtype='float32')
-    new_weights = coo_matrix(new_weights, dtype='float32')
+    correct_weights = correct_weights.tocoo()
+    new_weights = new_weights.tocoo()
 
     K_correct_weights = np.array(correct_weights.row * cols + correct_weights.col)
     K_new_weights = np.array(new_weights.row * cols + new_weights.col)
@@ -251,7 +251,7 @@ def retain_valid_weights(correct_weights, new_weights):
     if len(indices) != 0:
         rows, cols = np.unravel_index(indices, new_weights.shape)
         correct_weights = correct_weights.tolil()
-        correct_weights[rows, cols] = new_weights[rows, cols]
+        correct_weights[rows, cols] = new_weights.tocsr()[rows, cols]
 
     return correct_weights.tocsr()
 
