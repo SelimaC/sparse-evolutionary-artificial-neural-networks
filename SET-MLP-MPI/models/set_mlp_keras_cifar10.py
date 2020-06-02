@@ -122,7 +122,7 @@ class SET_MLP_CIFAR10:
         self.epsilon = 20 # control the sparsity level as discussed in the paper
         self.zeta = 0.3 # the fraction of the weights removed
         self.batch_size = 100 # batch size
-        self.maxepoches = 200 # number of epochs
+        self.maxepoches = 1000 # number of epochs
         self.learning_rate = 0.01 # SGD learning rate
         self.num_classes = 10 # number of classes
         self.momentum=0.9 # SGD momentum
@@ -147,7 +147,7 @@ class SET_MLP_CIFAR10:
         self.create_model()
 
         # train the SET-MLP model
-        # self.train()
+        self.train()
 
 
     def create_model(self):
@@ -156,13 +156,13 @@ class SET_MLP_CIFAR10:
         self.model = Sequential()
         self.model.add(Flatten(input_shape=(32, 32, 3)))
         self.model.add(Dense(4000, name="sparse_1",kernel_constraint=MaskWeights(self.wm1),weights=self.w1))
-        self.model.add(ReLU(name="srelu1",weights=self.wSRelu1))
+        self.model.add(SReLU(name="srelu1",weights=self.wSRelu1))
         self.model.add(Dropout(0.3))
         self.model.add(Dense(1000, name="sparse_2",kernel_constraint=MaskWeights(self.wm2),weights=self.w2))
-        self.model.add(ReLU(name="srelu2",weights=self.wSRelu2))
+        self.model.add(SReLU(name="srelu2",weights=self.wSRelu2))
         self.model.add(Dropout(0.3))
         self.model.add(Dense(4000, name="sparse_3",kernel_constraint=MaskWeights(self.wm3),weights=self.w3))
-        self.model.add(ReLU(name="srelu3",weights=self.wSRelu3))
+        self.model.add(SReLU(name="srelu3",weights=self.wSRelu3))
         self.model.add(Dropout(0.3))
         self.model.add(Dense(self.num_classes, name="dense_4", weights=self.w4)) #please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
         self.model.add(Activation('softmax'))
@@ -237,9 +237,8 @@ class SET_MLP_CIFAR10:
         # training process in a for loop
         self.accuracies_per_epoch = []
         for epoch in range(0, self.maxepoches):
-
-            sgd = SGDW(weight_decay=0.0002, momentum=0.9, learning_rate=0.01)
-            self.model.compile(loss='mean_squared_error', optimizer=sgd, metrics=['accuracy'])
+            sgd = optimizers.SGD(momentum=0.9, learning_rate=0.01)
+            self.model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
 
             historytemp = self.model.fit_generator(datagen.flow(x_train, y_train,
                                              batch_size=self.batch_size),
@@ -254,6 +253,10 @@ class SET_MLP_CIFAR10:
             self.weightsEvolution()
             K.clear_session()
             self.create_model()
+            np.savetxt("SReluWeights1.txt", self.wSRelu1)
+            np.savetxt("SReluWeights2.txt", self.wSRelu2)
+            np.savetxt("SReluWeights3.txt", self.wSRelu3)
+        self.model.save_weights('my_model_weights_fulltraining.h5')
 
         self.accuracies_per_epoch=np.asarray(self.accuracies_per_epoch)
 
@@ -326,13 +329,8 @@ if __name__ == '__main__':
 
     # create and run a SET-MLP model on CIFAR10
     model=SET_MLP_CIFAR10()
-    X_train = X_train.reshape(-1, 32, 32, 3)
-    X_test = X_test.reshape(-1, 32, 32, 3)
+    #
 
-    start_time = time.time()
-    model.fit(X_train, Y_train, X_test, Y_test, 100)
-    step_time = time.time() - start_time
-    print("\nTotal training time: ", step_time)
 
     # Test SET-MLP
     # result = model.model.evaluate(x=X_test, y=Y_test, verbose=0)
@@ -340,7 +338,7 @@ if __name__ == '__main__':
 
     # save accuracies over for all training epochs
     # in "results" folder you can find the output of running this file
-    np.savetxt("../Results2/set_mlp_relu_sgd_cifar10_one_cpu.txt", np.asarray(model.accuracies_per_epoch))
+    np.savetxt("../Results/set_mlp_relu_sgd_cifar10_one_cpu.txt", np.asarray(model.accuracies_per_epoch))
 
 
 
