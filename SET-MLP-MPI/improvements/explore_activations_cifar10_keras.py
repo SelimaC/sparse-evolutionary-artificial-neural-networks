@@ -4,6 +4,7 @@ from scipy import stats
 from scipy.sparse import csr_matrix, find
 import matplotlib.pyplot as plt
 import datetime
+from sklearn.metrics import classification_report
 import networkx as nx
 from networkx.algorithms import bipartite
 import numpy as np
@@ -117,6 +118,10 @@ print("Metrics test before pruning: ", result_test)
 result_train = model.model.evaluate(x=X_train, y=Y_train, verbose=0)
 print("Metrics train before pruning: ", result_train)
 
+Y_true = np.argmax(Y_test, axis=1) # Convert one-hot to index
+y_pred = model.predict_classes(X_test)
+print(classification_report(Y_true, y_pred))
+
 weights = {}
 weights[1] = model.get_layer("sparse_1").get_weights()[0]
 weights[2] = model.get_layer("sparse_2").get_weights()[0]
@@ -163,6 +168,26 @@ for k, w in weights.items():
     p20 = np.percentile(v, 20)
     p80 = np.percentile(v, 80)
 
+    unique, counts = np.unique(j, return_counts=True)
+    incoming_edges = counts
+    if k !=4:
+        i, _, _ = find(weights[k+1])
+        unique, counts = np.unique(i, return_counts=True)
+        outgoing_edges = counts
+        sum_incoming_weights = np.abs(weights[k]).sum(axis=0)
+        sum_outgoing_weights = np.abs(weights[k+1]).sum(axis=1)  
+        edges = sum_incoming_weights + sum_outgoing_weights
+    else:
+        edges = incoming_edges
+
+    if k != 4:
+        t = np.percentile(edges, 20)
+        print(f"Removing {edges[edges<=t].shape[0]} neurons and {incoming_edges[edges<=t].sum()} weights ")
+        edges = np.where(edges <= t, 0, edges)
+        ids = np.argwhere(edges == 0)
+        w[:, ids] = 0
+
+
     # negative_std = np.std(weights[weights < 0])
     # zscore_neg = stats.zscore(weights[weights < 0])
     eps = 0.05
@@ -170,13 +195,13 @@ for k, w in weights.items():
     # w[(w > negative_mean - eps)  & (w < 0)] = 0.0
     # w[(w <= np.round(p75,  2)) & (w > 0)] = 0.0
     # w[(w >= np.round(p25,  2)) & (w < 0)] = 0.0
-    w[np.abs(w) <= p50] = 0.0
+    # w[np.abs(w) <= p50] = 0.0
     # w[(np.abs(np.round(w, 2)) == np.round(positive_mean, 2)) | (np.abs(np.round(w, 2)) == np.round(negative_mean, 2))] = 0.0
     # weights[(np.round(weights, 2) != np.round(p5, 2)) & (np.round(weights, 2) != np.round(p25, 2)) &
     #         (np.round(weights, 2) != np.round(p50, 2)) & (np.round(weights, 2) != np.round(p75, 2)) & (np.round(weights, 2) != np.round(p95, 2))] = 0.0
     # weights[np.round(weights, 2) == np.round(p5,  2)] = 0.0
-    w[np.round(w, 2) == np.round(p25, 2)] = 0.0
-    w[np.round(w, 2) == np.round(p75, 2)] = 0.0
+    # w[np.round(w, 2) == np.round(p25, 2)] = 0.0
+    # w[np.round(w, 2) == np.round(p75, 2)] = 0.0
     #weights[np.round(weights, 2) == np.round(p95, 2)] = 0.0
     w = csr_matrix(w)
     i, j, v = find(w)
@@ -216,3 +241,6 @@ result_test = model.model.evaluate(x=X_test, y=Y_test, verbose=0)
 print("Metrics test after pruning: ", result_test)
 result_train = model.model.evaluate(x=X_train, y=Y_train, verbose=0)
 print("Metrics train after pruning: ", result_train)
+Y_true = np.argmax(Y_test, axis=1) # Convert one-hot to index
+y_pred = model.predict_classes(X_test)
+print(classification_report(Y_true, y_pred))
