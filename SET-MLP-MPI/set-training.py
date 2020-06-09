@@ -92,32 +92,32 @@ if __name__ == "__main__":
 
         # Load augmented dataset
         start_time = time.time()
-        X_train, Y_train, X_test, Y_test = load_cifar10_data(args.n_training_samples, args.n_testing_samples)
+        X_train, Y_train, X_test, Y_test = load_cifar10_data_not_flattened(args.n_training_samples, args.n_testing_samples)
         step_time = time.time() - start_time
         print("Loading augmented dataset time: ", step_time)
 
         # Load basic cifar10 dataset
         # X_train, Y_train, X_test, Y_test = load_cifar10_data(n_training_samples, n_testing_samples)
 
-        X_train = joblib.load('../data/CIFAR10/x_train_features.joblib')
-        X_test = joblib.load('../data/CIFAR10/x_test_features.joblib')
-        Y_train = joblib.load('../data/CIFAR10/y_train_features.joblib')
-        Y_test = joblib.load('../data/CIFAR10/y_test_features.joblib')
+        # X_train = joblib.load('../data/CIFAR10/x_train_features.joblib')
+        # X_test = joblib.load('../data/CIFAR10/x_test_features.joblib')
+        # Y_train = joblib.load('../data/CIFAR10/y_train_features.joblib')
+        # Y_test = joblib.load('../data/CIFAR10/y_test_features.joblib')
 
         # Create SET-MLP (MLP with adaptive sparse connectivity trained with Sparse Evolutionary Training)
         print("Number of neurons per layer:", X_train.shape[1], n_hidden_neurons, n_hidden_neurons,
               n_hidden_neurons, Y_train.shape[1])
 
-        set_mlp = SET_MLP((X_train.shape[1], 12000, 4000, 12000, 4000, 12000, 4000, 12000, 4000, 12000, 10),
-                          (Relu, NoActivation, Relu, NoActivation, Relu, NoActivation, Relu, NoActivation, Relu, Softmax), **config)
+        set_mlp = SET_MLP((3072, 4000, 1000, 4000, 10),
+                          (SparseReluSym, SparseReluSym, SparseReluSym, Softmax), **config)
         start_time = time.time()
-        set_mlp.fit(X_train, Y_train, X_test, Y_test, testing=True,
-                    save_filename=r"Results2/grey_set_mlp_sequential_cifar10_" +
+        set_mlp.fit_generator(X_train, Y_train, X_test, Y_test, testing=True,
+                    save_filename=r"Results2/sparse_relu_sym_augmented_set_mlp_sequential_cifar10_" +
                                   str(n_training_samples) + "_training_samples_e" + str(
                         epsilon) + "_rand" + str(i))
         step_time = time.time() - start_time
         print("\nTotal training time: ", step_time)
 
         # Test SET-MLP
-        accuracy, _ = set_mlp.predict(X_test, Y_test, batch_size=1)
+        accuracy, _ = set_mlp.predict(X_test.reshape(-1, 32 * 32 * 3), Y_test, batch_size=1)
         print("\nAccuracy of the last epoch on the testing data: ", accuracy)

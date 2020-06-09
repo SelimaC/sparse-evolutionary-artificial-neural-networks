@@ -37,7 +37,7 @@ def get_filtered_versions(img, index=0):
     # Laplacian filter
     laplacian_image = cv2.Laplacian(gray, cv2.CV_64F)
     step_time = time.time() - start_time
-    print(f"Finished image {index}...")
+    #print(f"Finished image {index}...")
     return median_image, unsharp_image, gray_segmentation, laplacian_image
 
 if __name__ == '__main__':
@@ -125,13 +125,13 @@ if __name__ == '__main__':
 
     x_train_median_mean = np.mean(x_train_median, axis=0)
     x_train_median_std = np.std(x_train_median, axis=0)
-    x_train_median = (x_train_median - x_train_mean) / x_train_std
-    x_test_median = (x_test_median - x_train_mean) / x_train_std
+    x_train_median = (x_train_median - x_train_median_mean) / x_train_median_std
+    x_test_median = (x_test_median - x_train_median_mean) / x_train_median_std
 
     x_train_unsharp_mean = np.mean(x_train_unsharp, axis=0)
     x_train_unsharp_std = np.std(x_train_unsharp, axis=0)
-    x_train_unsharp = (x_train_unsharp - x_train_mean) / x_train_std
-    x_test_unsharp = (x_test_unsharp - x_train_mean) / x_train_std
+    x_train_unsharp = (x_train_unsharp - x_train_unsharp_mean) / x_train_unsharp_std
+    x_test_unsharp = (x_test_unsharp - x_train_unsharp_mean) / x_train_unsharp_std
 
     x_train_gray_mean = np.mean(x_train_gray, axis=0)
     x_train_gray_std = np.std(x_train_gray, axis=0)
@@ -140,8 +140,8 @@ if __name__ == '__main__':
 
     x_train_laplacian_mean = np.mean(x_train_laplacian, axis=0)
     x_train_laplacian_std = np.std(x_train_laplacian, axis=0)
-    x_train_laplacian = (x_train_laplacian - x_train_gray_mean) / x_train_gray_std
-    x_test_laplacian = (x_test_laplacian - x_train_gray_mean) / x_train_gray_std
+    x_train_laplacian = (x_train_laplacian - x_train_laplacian_mean) / x_train_laplacian_std
+    x_test_laplacian = (x_test_laplacian - x_train_laplacian_mean) / x_train_laplacian_std
 
     print(x_train.shape)
     print(y_train.shape)
@@ -157,8 +157,8 @@ if __name__ == '__main__':
     print(x_test_gray.shape)
     print(x_test_laplacian.shape)
 
-    x_train_features = np.hstack((x_train, x_train_median, x_train_unsharp, x_train_gray, x_train_laplacian))
-    x_test_features = np.hstack((x_test, x_test_median, x_test_unsharp, x_test_gray, x_test_laplacian))
+    x_train_features = np.hstack((x_train, x_train_median, x_train_gray, x_train_laplacian))
+    x_test_features = np.hstack((x_test, x_test_median, x_test_gray, x_test_laplacian))
 
     print(x_train_features.shape)
     print(x_test_features.shape)

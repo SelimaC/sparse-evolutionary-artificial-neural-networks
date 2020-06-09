@@ -40,11 +40,11 @@ def unweighted_graph_from_weight_masks(weight_masks):
     return graph
 
 X_train, Y_train, X_test, Y_test = load_cifar10_data(50000, 10000)
-connections = np.load("../Results/set_mlp_sequential_softmax_mnist_60000_training_samples_e20_rand0_input_connections.npz")["inputLayerConnections"]
-weights = np.load("../Results/set_mlp_sequential_cifar10_50000_training_samples_e20_rand0_weights.npz",  allow_pickle=True)
-biases = np.load("../Results/set_mlp_sequential_cifar10_50000_training_samples_e20_rand0_biases.npz", allow_pickle=True)
-w10 = weights['arr_9'].item()
-b10 = biases['arr_9'].item()
+connections = np.load("../Results2/relu_augmented_set_mlp_sequential_cifar10_50000_training_samples_e20_rand0_input_connections.npz")["inputLayerConnections"]
+weights = np.load("../Results2/relu_augmented_set_mlp_sequential_cifar10_50000_training_samples_e20_rand0_weights.npz",  allow_pickle=True)
+biases = np.load("../Results2/relu_augmented_set_mlp_sequential_cifar10_50000_training_samples_e20_rand0_biases.npz", allow_pickle=True)
+w10 = weights['arr_999'].item()
+b10 = biases['arr_999'].item()
 
 weight_masks = np.array([w10[1].toarray(), w10[2].toarray(), w10[3].toarray(), w10[4].toarray()])
 #print("Started creating graph at", datetime.datetime.today().strftime('%Y%m%d_%H%M%S'))
@@ -81,7 +81,12 @@ set_mlp = SET_MLP((X_train.shape[1], 4000, 1000, 4000,
 
 set_mlp.w = w10
 set_mlp.b = b10
+print("\nNon zero before pruning: ")
+for k, w in w10.items():
+    print(w.count_nonzero())
 
+set_mlp.weightsEvolution_II()
+w10=set_mlp.w
 print("\nNon zero before pruning: ")
 for k, w in w10.items():
     print(w.count_nonzero())
@@ -117,21 +122,49 @@ for k, w in w10.items():
     p20 = np.percentile(v, 20)
     p80 = np.percentile(v, 80)
 
+    unique, counts = np.unique(j, return_counts=True)
+    incoming_edges = counts
+    if k !=4:
+        i, _, _ = find(w10[k+1])
+        unique, counts = np.unique(i, return_counts=True)
+        outgoing_edges = counts
+        sum_incoming_weights = np.abs(w10[k]).toarray().sum(axis=0)
+        sum_outgoing_weights = np.abs(w10[k+1]).toarray().sum(axis=1)
+        edges = sum_incoming_weights + sum_outgoing_weights
+        connections = outgoing_edges + incoming_edges
+    else:
+        sum_incoming_weights = np.abs(w10[k]).toarray().sum(axis=0)
+        edges = sum_incoming_weights
+        connections = incoming_edges
+
+    if k != 4:
+        t_connections = np.percentile(connections, 25)
+        t = np.percentile(edges, 25)
+        print(
+            f"Removing {edges[edges <= t].shape[0]} neurons and {incoming_edges[edges <= t].sum()} weights , weighted sum threshold is {t}, connection threshold is {t_connections}")
+        edges = np.where(edges <= t, 0, edges)
+        ids = np.argwhere(edges == 0)
+        weights[:, ids] = 0
+        if k == 3:
+            nextlayer = w10[k+1].toarray()
+            nextlayer[ids, :] = 0
+            w10[k+1] = csr_matrix(nextlayer)
+
     # negative_std = np.std(weights[weights < 0])
     # zscore_neg = stats.zscore(weights[weights < 0])
     eps = 0.08
     #weights[((weights > positive_mean - eps) & (weights < positive_mean + eps)) & (weights > 0)] = 0.0
     # weights[((weights > negative_mean - eps) & (weights < negative_mean + eps)) & (weights < 0)] = 0.0
-    weights[(weights <= np.round(p75,  2)) & (weights > 0)] = 0.0
-    weights[(weights >= np.round(p25,  2)) & (weights < 0)] = 0.0
-    #weights[np.abs(weights) <= eps] = 0.0
+    # weights[(weights <= np.round(p75,  2)) & (weights > 0)] = 0.0
+    # weights[(weights >= np.round(p25,  2)) & (weights < 0)] = 0.0
+    weights[np.abs(weights) <= p50] = 0.0
     # weights[(np.abs(np.round(weights, 2)) == np.round(positive_mean, 2)) | (np.abs(np.round(weights, 2)) == np.round(negative_mean, 2))] = 0.0
     # weights[(np.round(weights, 2) != np.round(p5, 2)) & (np.round(weights, 2) != np.round(p25, 2)) &
     #         (np.round(weights, 2) != np.round(p50, 2)) & (np.round(weights, 2) != np.round(p75, 2)) & (np.round(weights, 2) != np.round(p95, 2))] = 0.0
     #weights[np.round(weights, 2) == np.round(p5,  2)] = 0.0
-    weights[np.round(weights, 2) == np.round(p25, 2)] = 0.0
+    weights[np.round(weights, 3) == np.round(p25, 3)] = 0.0
     # weights[np.round(weights, 2) == np.round(p50, 2)] = 0.0
-    weights[np.round(weights, 2) == np.round(p75, 2)] = 0.0
+    weights[np.round(weights, 3) == np.round(p75, 3)] = 0.0
     #weights[np.round(weights, 2) == np.round(p95, 2)] = 0.0
     w = csr_matrix(weights)
     i, j, v = find(w)

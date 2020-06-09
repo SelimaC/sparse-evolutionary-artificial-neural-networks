@@ -99,19 +99,19 @@ wSRelu3 = None
 
 model = Sequential()
 model.add(Flatten(input_shape=(32, 32, 3)))
-model.add(Dense(4000, name="sparse_1",kernel_constraint=MaskWeights(wm1),weights=w1))
+model.add(Dense(4000, name="sparse_1",use_bias=False,kernel_constraint=MaskWeights(wm1),weights=w1))
 model.add(SReLU(name="srelu1",weights=wSRelu1))
 model.add(Dropout(0.3))
-model.add(Dense(1000, name="sparse_2",kernel_constraint=MaskWeights(wm2),weights=w2))
+model.add(Dense(1000, name="sparse_2",use_bias=False,kernel_constraint=MaskWeights(wm2),weights=w2))
 model.add(SReLU(name="srelu2",weights=wSRelu2))
 model.add(Dropout(0.3))
-model.add(Dense(4000, name="sparse_3",kernel_constraint=MaskWeights(wm3),weights=w3))
+model.add(Dense(4000, name="sparse_3",use_bias=False,kernel_constraint=MaskWeights(wm3),weights=w3))
 model.add(SReLU(name="srelu3",weights=wSRelu3))
 model.add(Dropout(0.3))
-model.add(Dense(10, name="dense_4", weights=w4)) #please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
+model.add(Dense(10, name="dense_4", use_bias=False,weights=w4)) #please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
 model.add(Activation('softmax'))
 
-model.load_weights('my_model_weights_fulltraining.h5')
+model.load_weights('my_model_weights_fulltraining_no_biases.h5')
 
 sgd = optimizers.SGD(momentum=0.9, learning_rate=0.01)
 model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
@@ -127,32 +127,13 @@ print(classification_report(Y_true, y_pred))
 
 weights = {}
 weights[1] = model.get_layer("sparse_1").get_weights()[0]
-np.savetxt("Weights1.txt", weights[1])
+np.savetxt("Weights1_no_bias.txt", weights[1])
 weights[2] = model.get_layer("sparse_2").get_weights()[0]
-np.savetxt("Weights2.txt", weights[2])
+np.savetxt("Weights2_no_bias.txt", weights[2])
 weights[3] = model.get_layer("sparse_3").get_weights()[0]
-np.savetxt("Weights3.txt", weights[3])
+np.savetxt("Weights3_no_bias.txt", weights[3])
 weights[4] = model.get_layer("dense_4").get_weights()[0]
-np.savetxt("Weights4.txt", weights[4])
-b ={}
-b[1] = model.get_layer("sparse_1").get_weights()[1]
-np.savetxt("Biases1.txt", b[1])
-b[2] = model.get_layer("sparse_2").get_weights()[1]
-np.savetxt("Biases2.txt", b[2])
-b[3] = model.get_layer("sparse_3").get_weights()[1]
-np.savetxt("Biases3.txt", b[3])
-b[4] = model.get_layer("dense_4").get_weights()[1]
-np.savetxt("Biases4.txt", b[4])
-
-# model.get_layer("sparse_1").set_weights([weights[1], np.zeros(4000)])
-# model.get_layer("sparse_2").set_weights([weights[2], np.zeros(1000)])
-# model.get_layer("sparse_3").set_weights([weights[3], np.zeros(4000)])
-# model.get_layer("dense_4").set_weights([weights[4], np.zeros(10)])
-#
-# result_test = model.model.evaluate(x=X_test, y=Y_test, verbose=0)
-# print("Metrics test before pruning no bias: ", result_test)
-# result_train = model.model.evaluate(x=X_train, y=Y_train, verbose=0)
-# print("Metrics train before pruning no bias: ", result_train)
+np.savetxt("Weights4_no_bias.txt", weights[4])
 
 print("\nNon zero before pruning: ")
 for k, w in weights.items():
@@ -196,7 +177,7 @@ for k, w in weights.items():
         unique, counts = np.unique(i, return_counts=True)
         outgoing_edges = counts
         sum_incoming_weights = np.abs(weights[k]).sum(axis=0)
-        sum_outgoing_weights = np.abs(weights[k+1]).sum(axis=1)  
+        sum_outgoing_weights = np.abs(weights[k+1]).sum(axis=1)
         edges = sum_incoming_weights + sum_outgoing_weights
         connections = outgoing_edges + incoming_edges
     else:
@@ -205,8 +186,8 @@ for k, w in weights.items():
         connections = incoming_edges
 
     if k != 4:
-        t_connections = np.percentile(connections, 20)
-        t = np.percentile(edges, 20)
+        t_connections = np.percentile(connections, 25)
+        t = np.percentile(edges, 25)
         print(
             f"Removing {edges[edges <= t].shape[0]} neurons and {incoming_edges[edges <= t].sum()} weights , weighted sum threshold is {t}, connection threshold is {t_connections}")
         edges = np.where(edges <= t, 0, edges)
@@ -225,13 +206,13 @@ for k, w in weights.items():
     # w[(w > negative_mean - eps)  & (w < 0)] = 0.0
     # w[(w <= np.round(p75,  2)) & (w > 0)] = 0.0
     # w[(w >= np.round(p25,  2)) & (w < 0)] = 0.0
-    w[np.abs(w) <= p50] = 0.0
+    #w[np.abs(w) <= p50] = 0.0
     # w[(np.abs(np.round(w, 2)) == np.round(positive_mean, 2)) | (np.abs(np.round(w, 2)) == np.round(negative_mean, 2))] = 0.0
     # weights[(np.round(weights, 2) != np.round(p5, 2)) & (np.round(weights, 2) != np.round(p25, 2)) &
     #         (np.round(weights, 2) != np.round(p50, 2)) & (np.round(weights, 2) != np.round(p75, 2)) & (np.round(weights, 2) != np.round(p95, 2))] = 0.0
     # weights[np.round(weights, 2) == np.round(p5,  2)] = 0.0
-    w[np.round(w, 3) == np.round(p25, 3)] = 0.0
-    w[np.round(w, 3) == np.round(p75, 3)] = 0.0
+    # w[np.round(w, 3) == np.round(p25, 3)] = 0.0
+    # w[np.round(w, 3) == np.round(p75, 3)] = 0.0
     #weights[np.round(weights, 2) == np.round(p95, 2)] = 0.0
     w = csr_matrix(w)
     i, j, v = find(w)
@@ -248,15 +229,15 @@ for k, w in weights.items():
 
 
 
-np.savetxt("Weights1.txt", weights[1])
-np.savetxt("Weights2.txt", weights[2])
-np.savetxt("Weights3.txt", weights[3])
-np.savetxt("Weights4.txt", weights[4])
-
-np.savetxt("Biases1.txt", b[1])
-np.savetxt("Biases2.txt", b[2])
-np.savetxt("Biases3.txt", b[3])
-np.savetxt("Biases4.txt", b[4])
+# np.savetxt("Weights1_no_bias.txt", weights[1])
+# np.savetxt("Weights2_no_bias.txt", weights[2])
+# np.savetxt("Weights3_no_bias.txt", weights[3])
+# np.savetxt("Weights4_no_bias.txt", weights[4])
+#
+# np.savetxt("Biases1_no_bias.txt", b[1])
+# np.savetxt("Biases2_no_bias.txt", b[2])
+# np.savetxt("Biases3_no_bias.txt", b[3])
+# np.savetxt("Biases4_no_bias.txt", b[4])
 
 wm1 = np.where(weights[1] > 0, 1,  0)
 wm2 = np.where(weights[2] > 0, 1,  0)
@@ -264,26 +245,26 @@ wm3 = np.where(weights[3] > 0, 1,  0)
 wm4 = np.where(weights[4] > 0, 1,  0)
 model = Sequential()
 model.add(Flatten(input_shape=(32, 32, 3)))
-model.add(Dense(4000, name="sparse_1",kernel_constraint=MaskWeights(wm1),weights=w1))
+model.add(Dense(4000, name="sparse_1",use_bias=False,kernel_constraint=MaskWeights(wm1),weights=w1))
 model.add(SReLU(name="srelu1",weights=wSRelu1))
 model.add(Dropout(0.3))
-model.add(Dense(1000, name="sparse_2",kernel_constraint=MaskWeights(wm2),weights=w2))
+model.add(Dense(1000, name="sparse_2",use_bias=False,kernel_constraint=MaskWeights(wm2),weights=w2))
 model.add(SReLU(name="srelu2",weights=wSRelu2))
 model.add(Dropout(0.3))
-model.add(Dense(4000, name="sparse_3",kernel_constraint=MaskWeights(wm3),weights=w3))
+model.add(Dense(4000, name="sparse_3",use_bias=False,kernel_constraint=MaskWeights(wm3),weights=w3))
 model.add(SReLU(name="srelu3",weights=wSRelu3))
 model.add(Dropout(0.3))
-model.add(Dense(10, name="dense_4", weights=w4)) #please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
+model.add(Dense(10, name="dense_4",use_bias=False, weights=w4)) #please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
 model.add(Activation('softmax'))
 sgd = optimizers.SGD(momentum=0.9, learning_rate=0.01)
 model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
 #model.load_weights('my_model_weights_fulltraining.h5')
-model.get_layer("sparse_1").set_weights([weights[1], b[1]])
-model.get_layer("sparse_2").set_weights([weights[2], b[2]])
-model.get_layer("sparse_3").set_weights([weights[3], b[3]])
-model.get_layer("dense_4").set_weights([weights[4], b[4]])
+model.get_layer("sparse_1").set_weights([weights[1]])
+model.get_layer("sparse_2").set_weights([weights[2]])
+model.get_layer("sparse_3").set_weights([weights[3]])
+model.get_layer("dense_4").set_weights([weights[4]])
 
-model.save_weights('my_model_weights_fulltraining_pruned.h5')
+model.save_weights('my_model_weights_no_bias_fulltraining_pruned.h5')
 
 result_test = model.model.evaluate(x=X_test, y=Y_test, verbose=0)
 print("Metrics test after pruning: ", result_test)

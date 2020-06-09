@@ -26,6 +26,53 @@ class LeakyRelu:
         z[z > 0] = 1
         return z
 
+
+class SparseRelu:
+    @staticmethod
+    def activation(z):
+        z = np.where(z < 0, -1/4 * z, z)
+        return z
+
+    @staticmethod
+    def prime(z):
+        z = np.where(z < 0, -1/4, 1)
+        return z
+
+
+class SparseReluSym:
+    @staticmethod
+    def activation(z):
+        z = np.where(z < 0, - z, z)
+        return z
+
+    @staticmethod
+    def prime(z):
+        z = np.where(z < 0, -1, 1)
+        return z
+
+class Elu:
+    @staticmethod
+    def activation(z):
+        z = np.where(z <= 0, (np.exp(z) - 1), z)
+        return z
+
+    @staticmethod
+    def prime(z):
+        z = np.where(z <= 0, Elu.activation(z) + 1, 1)
+        return z
+
+
+class Swish:
+    @staticmethod
+    def activation(z):
+        z = z * Sigmoid.activation(z)
+        return z
+
+    @staticmethod
+    def prime(z):
+        return Swish.activation(z) + Sigmoid.activation(z) * (1 - Swish.activation(z))
+
+
 class Sigmoid:
     @staticmethod
     def activation(z):
