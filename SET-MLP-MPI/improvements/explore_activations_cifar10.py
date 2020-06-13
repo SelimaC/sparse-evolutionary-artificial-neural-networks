@@ -85,7 +85,7 @@ print("\nNon zero before pruning: ")
 for k, w in w10.items():
     print(w.count_nonzero())
 
-set_mlp.weightsEvolution_II()
+#set_mlp.weightsEvolution_II()
 w10=set_mlp.w
 print("\nNon zero before pruning: ")
 for k, w in w10.items():

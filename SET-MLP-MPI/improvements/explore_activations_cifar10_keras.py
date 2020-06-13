@@ -10,6 +10,7 @@ from networkx.algorithms import bipartite
 import numpy as np
 from models.set_mlp_sequential import *
 from utils.load_data import *
+from keras import backend as K
 from utils.load_data import *
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
@@ -144,6 +145,9 @@ np.savetxt("Biases3.txt", b[3])
 b[4] = model.get_layer("dense_4").get_weights()[1]
 np.savetxt("Biases4.txt", b[4])
 
+
+
+
 # model.get_layer("sparse_1").set_weights([weights[1], np.zeros(4000)])
 # model.get_layer("sparse_2").set_weights([weights[2], np.zeros(1000)])
 # model.get_layer("sparse_3").set_weights([weights[3], np.zeros(4000)])
@@ -164,6 +168,39 @@ wSRelu2 = model.get_layer("srelu2").get_weights()
 wSRelu3 = model.get_layer("srelu3").get_weights()
 
 for k, w in weights.items():
+    if k==2:
+        get_nth_layer_output = K.function([model.layers[0].input], [model.layers[4].output])
+        layer_output = get_nth_layer_output([X_test])[0]
+        mean_input = layer_output.mean(axis=0)
+
+        get_nth_layer_output = K.function([model.layers[0].input], [model.layers[5].output])
+        layer_output = get_nth_layer_output([X_test])[0]
+        mean_activation = layer_output.mean(axis=0)
+    if k==1:
+        get_nth_layer_output = K.function([model.layers[0].input], [model.layers[1].output])
+        layer_output = get_nth_layer_output([X_test])[0]
+        mean_input = layer_output.mean(axis=0)
+
+        get_nth_layer_output = K.function([model.layers[0].input], [model.layers[2].output])
+        layer_output = get_nth_layer_output([X_test])[0]
+        mean_activation = layer_output.mean(axis=0)
+    if k==3:
+        get_nth_layer_output = K.function([model.layers[0].input], [model.layers[7].output])
+        layer_output = get_nth_layer_output([X_test])[0]
+        mean_input = layer_output.mean(axis=0)
+
+        get_nth_layer_output = K.function([model.layers[0].input], [model.layers[8].output])
+        layer_output = get_nth_layer_output([X_test])[0]
+        mean_activation = layer_output.mean(axis=0)
+    if k==4:
+        get_nth_layer_output = K.function([model.layers[0].input], [model.layers[10].output])
+        layer_output = get_nth_layer_output([X_test])[0]
+        mean_input = layer_output.mean(axis=0)
+
+        get_nth_layer_output = K.function([model.layers[0].input], [model.layers[11].output])
+        layer_output = get_nth_layer_output([X_test])[0]
+        mean_activation = layer_output.mean(axis=0)
+
     w_sparse = csr_matrix(w)
     i, j, v = find(w_sparse)
     # plt.hist(np.round(v,2), bins=100)
@@ -205,8 +242,8 @@ for k, w in weights.items():
         connections = incoming_edges
 
     if k != 4:
-        t_connections = np.percentile(connections, 20)
-        t = np.percentile(edges, 20)
+        t_connections = np.percentile(connections, 25)
+        t = np.percentile(edges, 25)
         print(
             f"Removing {edges[edges <= t].shape[0]} neurons and {incoming_edges[edges <= t].sum()} weights , weighted sum threshold is {t}, connection threshold is {t_connections}")
         edges = np.where(edges <= t, 0, edges)

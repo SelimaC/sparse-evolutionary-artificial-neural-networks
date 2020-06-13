@@ -170,7 +170,7 @@ for k, w in weights.items():
     p20 = np.percentile(v, 20)
     p80 = np.percentile(v, 80)
 
-    unique, counts = np.unique(j, return_counts=True)
+    counts = np.bincount(j)
     incoming_edges = counts
     if k !=4:
         i, _, _ = find(weights[k+1])
