@@ -17,12 +17,12 @@ class Relu:
 class LeakyRelu:
     @staticmethod
     def activation(z):
-        z[z < 0] *= 0.01
+        z[z < 0] *= 0.25
         return z
 
     @staticmethod
     def prime(z):
-        z[z < 0] = 0.01
+        z[z < 0] = 0.25
         z[z > 0] = 1
         return z
 
@@ -63,7 +63,31 @@ class SparseReluHalfSym:
         return z
 
 
+class SparseReluHalfSymPositive:
+    @staticmethod
+    def activation(z):
+        z = np.where(z < 0, 0.5 * z, z)
+        return z
+
+    @staticmethod
+    def prime(z):
+        z = np.where(z < 0, 0.5, 1)
+        return z
+
+
 class SparseReluSym75:
+    @staticmethod
+    def activation(z):
+        z = np.where(z < 0, - 0.75 * z, z)
+        return z
+
+    @staticmethod
+    def prime(z):
+        z = np.where(z < 0, -0.75, 1)
+        return z
+
+
+class SparseReluSym75Positive:
     @staticmethod
     def activation(z):
         z = np.where(z < 0, - 0.75 * z, z)
