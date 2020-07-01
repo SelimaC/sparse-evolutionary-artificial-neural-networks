@@ -1,6 +1,6 @@
 # Authors: Decebal Constantin Mocanu et al.;
 # Code associated with SCADS Summer School 2020 tutorial "	Scalable Deep Learning Tutorial"; https://www.scads.de/de/summerschool2020
-# This is a pre-alpha free software and was tested in Winows 10 with Python 3.7.6, Numpy 1.17.2, SciPy 1.4.1, Numba 0.48.0
+# This is a pre-alpha free software and was tested in Windows 10 with Python 3.7.6, Numpy 1.17.2, SciPy 1.4.1, Numba 0.48.0
 
 # If you use parts of this code please cite the following article:
 #@article{Mocanu2018SET,
@@ -232,7 +232,6 @@ class SET_MLP:
         for k, v in update_params.items():
             self._update_w_b(k, v[0], v[1])
 
-
     def _update_w_b(self, index, dw, delta):
         """
         Update weights and biases.
@@ -262,8 +261,9 @@ class SET_MLP:
         """
         if not x.shape[0] == y_true.shape[0]:
             raise ValueError("Length of x and y arrays don't match")
+
         # Initiate the loss object with the final activation function
-        self.loss = loss(self.activations[self.n_layers])
+        self.loss = loss()
         self.learning_rate = learning_rate
         self.momentum = momentum
         self.weight_decay = weight_decay
@@ -376,11 +376,11 @@ class SET_MLP:
             keepConnections = 0
             for ik, (row, data) in enumerate(zip(wlil.rows, wlil.data)):
                 for jk, val in zip(row, data):
-                    if ((val < largestNegative) or (val > smallestPositive)):
+                    if (val < largestNegative) or (val > smallestPositive):
                         wdok[ik, jk] = val
                         pdwdok[ik, jk] = pdwlil[ik, jk]
                         keepConnections += 1
-            limit = np.sqrt(6. / float(self.dimensions[i] + self.dimensions[i + 1]))
+            limit = np.sqrt(6. / float(self.dimensions[i]))
             # add new random connections
             for kk in range(self.w[i].data.shape[0] - keepConnections):
                 ik = np.random.randint(0, self.dimensions[i - 1])
@@ -470,18 +470,17 @@ class SET_MLP:
 
                 # adding all the values along with corresponding row and column indices - Added by Amar
                 valsWNew = np.append(valsWNew, randomVals) # be careful - we can add to an existing link ?
-                #valsPDNew = np.append(valsPDNew, zeroVals) # be careful - adding explicit zeros - any reason??
+                # valsPDNew = np.append(valsPDNew, zeroVals) # be careful - adding explicit zeros - any reason??
                 if valsWNew.shape[0] != rowsWNew.shape[0]:
                     print("not good")
-                self.w[i] = coo_matrix((valsWNew , (rowsWNew , colsWNew)),(self.dimensions[i-1],self.dimensions[i])).tocsr()
+                self.w[i] = coo_matrix((valsWNew, (rowsWNew, colsWNew)), (self.dimensions[i-1], self.dimensions[i])).tocsr()
 
-                #print("Number of non zeros in W and PD matrix after evolution in layer",i,[(self.w[i].data.shape[0]), (self.pdw[i].data.shape[0])])
+                # print("Number of non zeros in W and PD matrix after evolution in layer",i,[(self.w[i].data.shape[0]), (self.pdw[i].data.shape[0])])
 
                 t_ev_2 = datetime.datetime.now()
                 print("Weights evolution time for layer", i,"is", t_ev_2 - t_ev_1)
 
-
-    def predict(self, x_test, y_test, batch_size=10000):
+    def predict(self, x_test, y_test, batch_size=100):
         """
         :param x_test: (array) Test input
         :param y_test: (array) Correct test output
@@ -527,15 +526,15 @@ if __name__ == "__main__":
     for i in range(1):
 
         # load data
-        noTrainingSamples = 2000 # max 60000 for Fashion MNIST
-        noTestingSamples = 1000  # max 10000 for Fshion MNIST
+        noTrainingSamples = 10000 # max 60000 for Fashion MNIST
+        noTestingSamples = 5000  # max 10000 for Fshion MNIST
         X_train, Y_train, X_test, Y_test = load_fashion_mnist_data(noTrainingSamples, noTestingSamples)
 
         # set model parameters
         noHiddenNeuronsLayer = 1000
         epsilon = 13 # set the sparsity level
         zeta = 0.3 # in [0..1]. It gives the percentage of unimportant connections which are removed and replaced with random ones after every epoch
-        noTrainingEpochs = 500
+        noTrainingEpochs = 200
         batchSize = 40
         dropoutRate = 0.2
         learningRate = 0.05
