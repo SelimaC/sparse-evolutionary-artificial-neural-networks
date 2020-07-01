@@ -40,9 +40,11 @@
 
 from __future__ import division
 from __future__ import print_function
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
+from keras.layers import Dense, Dropout, Activation, Flatten, ReLU
 from keras import optimizers
 import numpy as np
 from keras import backend as K
@@ -117,9 +119,6 @@ class SET_MLP_CIFAR10:
         self.w4 = None
 
         # initialize weights for SReLu activation function
-        self.wSRelu1 = None
-        self.wSRelu2 = None
-        self.wSRelu3 = None
 
         # create a SET-MLP model
         self.create_model()
@@ -134,13 +133,13 @@ class SET_MLP_CIFAR10:
         self.model = Sequential()
         self.model.add(Flatten(input_shape=(32, 32, 3)))
         self.model.add(Dense(4000, name="sparse_1",kernel_constraint=MaskWeights(self.wm1),weights=self.w1))
-        self.model.add(SReLU(name="srelu1",weights=self.wSRelu1))
+        self.model.add(ReLU())
         self.model.add(Dropout(0.3))
         self.model.add(Dense(1000, name="sparse_2",kernel_constraint=MaskWeights(self.wm2),weights=self.w2))
-        self.model.add(SReLU(name="srelu2",weights=self.wSRelu2))
+        self.model.add(ReLU())
         self.model.add(Dropout(0.3))
         self.model.add(Dense(4000, name="sparse_3",kernel_constraint=MaskWeights(self.wm3),weights=self.w3))
-        self.model.add(SReLU(name="srelu3",weights=self.wSRelu3))
+        self.model.add(ReLU())
         self.model.add(Dropout(0.3))
         self.model.add(Dense(self.num_classes, name="dense_4", weights=self.w4)) #please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
         self.model.add(Activation('softmax'))
@@ -179,9 +178,9 @@ class SET_MLP_CIFAR10:
         self.w3 = self.model.get_layer("sparse_3").get_weights()
         self.w4 = self.model.get_layer("dense_4").get_weights()
 
-        self.wSRelu1 = self.model.get_layer("srelu1").get_weights()
-        self.wSRelu2 = self.model.get_layer("srelu2").get_weights()
-        self.wSRelu3 = self.model.get_layer("srelu3").get_weights()
+        # self.wSRelu1 = self.model.get_layer("srelu1").get_weights()
+        # self.wSRelu2 = self.model.get_layer("srelu2").get_weights()
+        # self.wSRelu3 = self.model.get_layer("srelu3").get_weights()
 
         [self.wm1, self.wm1Core] = self.rewireMask(self.w1[0], self.noPar1)
         [self.wm2, self.wm2Core] = self.rewireMask(self.w2[0], self.noPar2)
@@ -190,6 +189,43 @@ class SET_MLP_CIFAR10:
         self.w1[0] = self.w1[0] * self.wm1Core
         self.w2[0] = self.w2[0] * self.wm2Core
         self.w3[0] = self.w3[0] * self.wm3Core
+
+    def rewireMask_new(self,weights, outgoing_weights, noWeights):
+        # rewire weight matrix
+        sum_incoming_weights = np.abs(weights).sum(axis=0)
+        sum_outgoing_weights = np.abs(outgoing_weights).sum(axis=1)
+        edges = sum_outgoing_weights
+
+        t = np.percentile(edges, 20)
+        #edges = np.where(edges <= t, 0, edges)
+        ids = np.argwhere(edges == 0)
+
+        # remove zeta largest negative and smallest positive weights
+        values = np.sort(weights.ravel())
+        firstZeroPos = find_first_pos(values, 0)
+        lastZeroPos = find_last_pos(values, 0)
+        largestNegative = values[int((1 - self.zeta) * firstZeroPos)]
+        smallestPositive = values[
+            int(min(values.shape[0] - 1, lastZeroPos + self.zeta * (values.shape[0] - lastZeroPos)))]
+        rewiredWeights = weights.copy();
+        rewiredWeights[rewiredWeights > smallestPositive] = 1;
+        rewiredWeights[rewiredWeights < largestNegative] = 1;
+        rewiredWeights[rewiredWeights != 1] = 0;
+        weightMaskCore = rewiredWeights.copy()
+
+        probs = edges/edges.sum()
+
+        # add zeta random weights
+        nrAdd = 0
+        noRewires = noWeights - np.sum(rewiredWeights)
+        while (nrAdd < noRewires):
+            i = np.random.randint(0, rewiredWeights.shape[0])
+            j = np.random.choice(range(0, rewiredWeights.shape[1]), p=probs)
+            if (rewiredWeights[i, j] == 0) :
+                rewiredWeights[i, j] = 1
+                nrAdd += 1
+
+        return [rewiredWeights, weightMaskCore]
 
     def train(self):
 
@@ -259,7 +295,7 @@ if __name__ == '__main__':
 
     # save accuracies over for all training epochs
     # in "results" folder you can find the output of running this file
-    np.savetxt("results/set_mlp_srelu_sgd_cifar10_acc.txt", np.asarray(model.accuracies_per_epoch))
+    np.savetxt("results/set_mlp_relu_sgd_cifar10_acc.txt", np.asarray(model.accuracies_per_epoch))
 
 
 

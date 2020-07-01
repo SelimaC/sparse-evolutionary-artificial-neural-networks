@@ -101,18 +101,18 @@ def createWeightsMask(epsilon,noRows, noCols):
 class SET_MLP_MADELON:
     def __init__(self):
         # set model parameters
-        self.epsilon = 13 # control the sparsity level as discussed in the paper
-        self.zeta = 0.3 # the fraction of the weights removed
-        self.batch_size = 100 # batch size
-        self.maxepoches = 1000 # number of epochs
-        self.learning_rate = 0.1 # SGD learning rate
-        self.num_classes = 2 # number of classes
-        self.momentum=0.9 # SGD momentum
+        self.epsilon = 13  # control the sparsity level as discussed in the paper
+        self.zeta = 0.3  # the fraction of the weights removed
+        self.batch_size = 100  # batch size
+        self.maxepoches = 1000  # number of epochs
+        self.learning_rate = 0.1  # SGD learning rate
+        self.num_classes = 2  # number of classes
+        self.momentum = 0.9  # SGD momentum
 
         # generate an Erdos Renyi sparse weights mask for each layer
-        [self.noPar1, self.wm1] = createWeightsMask(self.epsilon,500, 1000)
-        [self.noPar2, self.wm2] = createWeightsMask(self.epsilon,1000, 500)
-        [self.noPar3, self.wm3] = createWeightsMask(self.epsilon,500, 1000)
+        [self.noPar1, self.wm1] = createWeightsMask(self.epsilon, 500, 100)
+        [self.noPar2, self.wm2] = createWeightsMask(self.epsilon, 100, 100)
+        [self.noPar3, self.wm3] = createWeightsMask(self.epsilon, 100, 100)
 
         # initialize layers weights
         self.w1 = None
@@ -136,13 +136,13 @@ class SET_MLP_MADELON:
 
         # create a SET-MLP model for CIFAR10 with 3 hidden layers
         self.model = Sequential()
-        self.model.add(Dense(1000, name="sparse_1",kernel_constraint=MaskWeights(self.wm1),weights=self.w1, input_shape=(500,)))
+        self.model.add(Dense(400, name="sparse_1",kernel_constraint=MaskWeights(self.wm1),weights=self.w1, input_shape=(500,)))
         self.model.add(SReLU(name="srelu1",weights=self.wSRelu1))
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(500, name="sparse_2",kernel_constraint=MaskWeights(self.wm2),weights=self.w2))
+        self.model.add(Dense(100, name="sparse_2",kernel_constraint=MaskWeights(self.wm2),weights=self.w2))
         self.model.add(SReLU(name="srelu2",weights=self.wSRelu2))
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(1000, name="sparse_3",kernel_constraint=MaskWeights(self.wm3),weights=self.w3))
+        self.model.add(Dense(400, name="sparse_3",kernel_constraint=MaskWeights(self.wm3),weights=self.w3))
         self.model.add(SReLU(name="srelu3",weights=self.wSRelu3))
         self.model.add(Dropout(0.3))
         self.model.add(Dense(1,  name="dense_4",activation='sigmoid'))
@@ -157,10 +157,10 @@ class SET_MLP_MADELON:
         lastZeroPos = find_last_pos(values, 0)
         largestNegative = values[int((1-self.zeta) * firstZeroPos)]
         smallestPositive = values[int(min(values.shape[0] - 1, lastZeroPos +self.zeta * (values.shape[0] - lastZeroPos)))]
-        rewiredWeights = weights.copy();
-        rewiredWeights[rewiredWeights > smallestPositive] = 1;
-        rewiredWeights[rewiredWeights < largestNegative] = 1;
-        rewiredWeights[rewiredWeights != 1] = 0;
+        rewiredWeights = weights.copy()
+        rewiredWeights[rewiredWeights > smallestPositive] = 1
+        rewiredWeights[rewiredWeights < largestNegative] = 1
+        rewiredWeights[rewiredWeights != 1] = 0
         weightMaskCore = rewiredWeights.copy()
 
         # add zeta random weights
@@ -185,18 +185,18 @@ class SET_MLP_MADELON:
         edges = np.where(edges <= t, 0, edges)
         ids = np.argwhere(edges == 0)
 
-        rewiredWeights = weights.copy();
-        rewiredWeights[:, ids] = 0;
-        rewiredWeights[rewiredWeights != 0] = 1;
+        rewiredWeights = weights.copy()
+        rewiredWeights[:, ids] = 0
+        rewiredWeights[rewiredWeights != 0] = 1
         weightMaskCore = rewiredWeights.copy()
 
         # add zeta random weights
         nrAdd = 0
         noRewires = noWeights - np.sum(rewiredWeights)
-        while (nrAdd < noRewires):
+        while nrAdd < noRewires:
             i = np.random.randint(0, rewiredWeights.shape[0])
             j = np.random.randint(0, rewiredWeights.shape[1])
-            if (rewiredWeights[i, j] == 0):
+            if rewiredWeights[i, j] == 0:
                 rewiredWeights[i, j] = 1
                 nrAdd += 1
 
@@ -237,7 +237,7 @@ class SET_MLP_MADELON:
         # training process in a for loop
         self.accuracies_per_epoch=[]
         for epoch in range(0, self.maxepoches):
-            sgd = optimizers.SGD(momentum=0.9, learning_rate=0.05)
+            sgd = optimizers.SGD(momentum=0.9, learning_rate=0.1)
             self.model.compile(loss='binary_crossentropy', optimizer=sgd, metrics=['accuracy'])
             # Shuffle the data
             seed = np.arange(x_train.shape[0])
@@ -290,19 +290,19 @@ class SET_MLP_MADELON:
         y_train = np.where(y_train == -1, 0, 1)
         y_val = np.where(y_val == -1, 0, 1)
 
-        # scale the data in 0..1
-        x_min = x_train.min()
-        x_max = x_train.max()
-        x_train = (x_train - x_min) / (x_max - x_min)
-        x_test = (x_test - x_min) / (x_max - x_min)
-        x_val = (x_val - x_min) / (x_max - x_min)
+        xTrainMean = np.mean(x_train, axis=0)
+        xTtrainStd = np.std(x_train, axis=0)
+        x_train = (x_train - xTrainMean) / xTtrainStd
+        x_test = (x_test - xTrainMean) / xTtrainStd
+        x_val = (x_val - xTrainMean) / xTtrainStd
 
+        # y_train = np_utils.to_categorical(y_train, self.num_classes)
+        # y_val = np_utils.to_categorical(y_val, self.num_classes)
         x_train = x_train.astype('float32')
         x_test = x_test.astype('float32')
         x_val = x_val.astype('float32')
 
         return [x_train, x_val, y_train, y_val]
-
 
 if __name__ == '__main__':
 
@@ -311,7 +311,7 @@ if __name__ == '__main__':
 
     # save accuracies over for all training epochs
     # in "results" folder you can find the output of running this file
-    np.savetxt("results/set_new_version_mlp_srelu_sgd_madelon_acc.txt", np.asarray(model.accuracies_per_epoch))
+    np.savetxt("results/set_new_version_mlp_srelu_sgd_madelon_3_acc.txt", np.asarray(model.accuracies_per_epoch))
 
 
 
