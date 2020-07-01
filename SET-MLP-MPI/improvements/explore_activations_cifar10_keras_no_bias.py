@@ -111,7 +111,7 @@ model.add(Dropout(0.3))
 model.add(Dense(10, name="dense_4", use_bias=False,weights=w4)) #please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
 model.add(Activation('softmax'))
 
-model.load_weights('my_model_weights_fulltraining_no_biases.h5')
+model.load_weights('cifar10_weights_fulltraining_no_biases.h5')
 
 sgd = optimizers.SGD(momentum=0.9, learning_rate=0.01)
 model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
@@ -258,7 +258,7 @@ model.add(Dense(10, name="dense_4",use_bias=False, weights=w4)) #please note tha
 model.add(Activation('softmax'))
 sgd = optimizers.SGD(momentum=0.9, learning_rate=0.01)
 model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
-#model.load_weights('my_model_weights_fulltraining.h5')
+#model.load_weights('cifar10_weights_fulltraining.h5')
 model.get_layer("sparse_1").set_weights([weights[1]])
 model.get_layer("sparse_2").set_weights([weights[2]])
 model.get_layer("sparse_3").set_weights([weights[3]])

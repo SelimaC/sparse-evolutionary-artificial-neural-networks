@@ -476,7 +476,7 @@ model.add(Dense(10, name="dense_4", weights=w4)) #please note that there is no n
 model.add(Activation('softmax'))
 sgd = optimizers.SGD(momentum=0.9, learning_rate=0.01)
 model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
-#model.load_weights('my_model_weights_fulltraining.h5')
+#model.load_weights('cifar10_weights_fulltraining.h5')
 model.get_layer("sparse_1").set_weights([weights[1], b[1]])
 model.get_layer("sparse_2").set_weights([weights[2], b[2]])
 model.get_layer("sparse_3").set_weights([weights[3], b[3]])

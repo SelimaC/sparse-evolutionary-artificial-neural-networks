@@ -10,9 +10,9 @@ weights[2] = np.loadtxt("Weights2_no_bias.txt")
 weights[3] = np.loadtxt("Weights3_no_bias.txt")
 weights[4] = np.loadtxt("Weights4_no_bias.txt")
 
-srelu_weights_layer1 = np.loadtxt("SReluWeights1_no_biases.txt")
-srelu_weights_layer2 = np.loadtxt("SReluWeights2_no_biases.txt")
-srelu_weights_layer3 = np.loadtxt("SReluWeights3_no_biases.txt")
+srelu_weights_layer1 = np.loadtxt("SReluWeights1_no_biases_cifar10.txt")
+srelu_weights_layer2 = np.loadtxt("SReluWeights2_no_biases_cifar10.txt")
+srelu_weights_layer3 = np.loadtxt("SReluWeights3_no_biases_cifar10.txt")
 
 def srelu(tl, al, tr, ar, x):
     if x >= tr:
