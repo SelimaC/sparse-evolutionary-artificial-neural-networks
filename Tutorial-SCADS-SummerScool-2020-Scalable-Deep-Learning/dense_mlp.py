@@ -33,40 +33,11 @@
 # Ritchie Vink (https://www.ritchievink.com): for making available on Github a nice Python implementation of fully connected MLPs. This SET-MLP implementation was built on top of his MLP code:
 #                                             https://github.com/ritchie46/vanilla-machine-learning/blob/master/vanilla_mlp.py
 
-from scipy.sparse import lil_matrix
-from scipy.sparse import coo_matrix
-from scipy.sparse import dok_matrix
-from nn_functions import *
-import datetime
-import os
-import sys
+
 import numpy as np
-from numba import njit, prange
-
-stderr = sys.stderr
-sys.stderr = open(os.devnull, 'w')
-sys.stderr = stderr
-
-
-@njit(parallel=True, fastmath=True, cache=True)
-def backpropagation_updates_Numpy(a, delta, rows, cols, out):
-    for i in prange(out.shape[0]):
-        s = 0
-        for j in range(a.shape[0]):
-            s += a[j, rows[i]] * delta[j, cols[i]]
-        out[i] = s / a.shape[0]
-
-
-@njit(fastmath=True, cache=True)
-def find_first_pos(array, value):
-    idx = (np.abs(array - value)).argmin()
-    return idx
-
-
-@njit(fastmath=True, cache=True)
-def find_last_pos(array, value):
-    idx = (np.abs(array - value))[::-1].argmin()
-    return array.shape[0] - idx
+from numba import njit
+import datetime
+from nn_functions import *
 
 
 @njit(fastmath=True, cache=True)
@@ -88,32 +59,8 @@ def dropout(x, rate):
     return x * scale * keep_mask, keep_mask
 
 
-def createSparseWeights(epsilon, noRows, noCols):
-    # He uniform initialization
-    limit = np.sqrt(6. / float(noRows))
-
-    mask_weights = np.random.rand(noRows, noCols)
-    prob = 1 - (epsilon * (noRows + noCols)) / (noRows * noCols)  # normal to have 8x connections
-
-    # generate an Erdos Renyi sparse weights mask
-    weights = lil_matrix((noRows, noCols))
-    n_params = np.count_nonzero(mask_weights[mask_weights >= prob])
-    weights[mask_weights >= prob] = np.random.uniform(-limit, limit, n_params)
-    print("Create sparse matrix with ", weights.getnnz(), " connections and ",
-           (weights.getnnz() / (noRows * noCols)) * 100, "% density level")
-    weights = weights.tocsr()
-    return weights
-
-
-def array_intersect(A, B):
-    # this are for array intersection
-    nrows, ncols = A.shape
-    dtype = {'names': ['f{}'.format(i) for i in range(ncols)], 'formats': ncols * [A.dtype]}
-    return np.in1d(A.view(dtype), B.view(dtype))  # boolean return
-
-
 class Dense_MLP:
-    def __init__(self, dimensions, activations, epsilon=20):
+    def __init__(self, dimensions, activations):
         """
         :param dimensions: (tpl/ list) Dimensions of the neural net. (input, hidden layer, output)
         :param activations: (tpl/ list) Activations functions.
@@ -130,15 +77,14 @@ class Dense_MLP:
         ----------------------------------------
 
         dimensions =  (3312,     3000,  3000,  3000,  5)
-        activations = (          Relu,  Relu,  Relu,  Softmax)
+        activations = (          Relu,  Relu,  Relu,  Sigmoid)
         """
         self.n_layers = len(dimensions)
         self.loss = None
-        self.dropout_rate = 0
         self.learning_rate = None
         self.momentum = None
         self.weight_decay = None
-        self.droprate = 0  # dropout rate
+        self.dropout_rate = 0  # dropout rate
         self.dimensions = dimensions
 
         # Weights and biases are initiated by index. For a one hidden layer net you will have a w[1] and w[2]
@@ -150,9 +96,10 @@ class Dense_MLP:
         # Activations are also initiated by index. For the example we will have activations[2] and activations[3]
         self.activations = {}
         for i in range(len(dimensions) - 1):
+            # He uniform initialization
             limit = np.sqrt(6. / float(dimensions[i]))
-            self.w[i + 1] = np.random.uniform(-limit, limit, (dimensions[i],dimensions[i + 1]))
-            self.b[i + 1] = np.zeros(dimensions[i + 1], dtype='float32')
+            self.w[i + 1] = np.random.uniform(-limit, limit, (dimensions[i], dimensions[i + 1]))
+            self.b[i + 1] = np.zeros(dimensions[i + 1])
             self.activations[i + 2] = activations[i]
 
     def _feed_forward(self, x, drop=False):
@@ -202,12 +149,10 @@ class Dense_MLP:
         # Determine partial derivative and delta for the output layer.
         # delta output layer
         delta = self.loss.delta(y_true, a[self.n_layers])
-        dw = coo_matrix(self.w[self.n_layers - 1], dtype='float32')
-        # compute backpropagation updates
-        backpropagation_updates_Numpy(a[self.n_layers - 1], delta, dw.row, dw.col, dw.data)
+        dw = np.dot(a[self.n_layers - 1].T, delta)
 
         update_params = {
-            self.n_layers - 1: (dw.tocsr(),  np.mean(delta, axis=0))
+            self.n_layers - 1: (dw, np.mean(delta, axis=0))
         }
 
         # In case of three layer net will iterate over i = 2 and i = 1
@@ -222,12 +167,9 @@ class Dense_MLP:
             else:
                 delta = (delta @ self.w[i].transpose()) * self.activations[i].prime(z[i])
 
-            dw = coo_matrix(self.w[i - 1], dtype='float32')
+            dw = np.dot(a[i - 1].T, delta)
 
-            # compute backpropagation updates
-            backpropagation_updates_Numpy(a[i - 1], delta, dw.row, dw.col, dw.data)
-
-            update_params[i - 1] = (dw.tocsr(),  np.mean(delta, axis=0))
+            update_params[i - 1] = (dw, np.mean(delta, axis=0))
         for k, v in update_params.items():
             self._update_w_b(k, v[0], v[1])
 
@@ -269,12 +211,9 @@ class Dense_MLP:
         self.zeta = zeta
         self.droprate = dropoutrate
         self.save_filename = save_filename
-        self.inputLayerConnections = []
-        self.inputLayerConnections.append(self.getCoreInputConnections())
-        np.savez_compressed(self.save_filename + "_input_connections.npz",
-                            inputLayerConnections=self.inputLayerConnections)
 
         maximum_accuracy = 0
+
         metrics = np.zeros((epochs, 4))
 
         for i in range(epochs):
@@ -292,20 +231,19 @@ class Dense_MLP:
                 l = (j + 1) * batch_size
                 z, a, masks = self._feed_forward(x_[k:l], True)
 
-                self._back_prop(z, a, masks,  y_[k:l])
+                self._back_prop(z, a, masks, y_[k:l])
 
             t2 = datetime.datetime.now()
 
-            print("\nSET-MLP Epoch ", i)
+            print("\nFC-MLP Epoch ", i)
             print("Training time: ", t2 - t1)
 
             # test model performance on the test data at each epoch
             # this part is useful to understand model performance and can be commented for production settings
-            if testing:
+            if (testing):
                 t3 = datetime.datetime.now()
-                accuracy_test, activations_test = self.predict(x_test, y_test)
-                accuracy_train, activations_train = self.predict(x, y_true)
-
+                accuracy_test, activations_test = self.predict(x_test, y_test, batch_size)
+                accuracy_train, activations_train = self.predict(x, y_true, batch_size)
                 t4 = datetime.datetime.now()
                 maximum_accuracy = max(maximum_accuracy, accuracy_test)
                 loss_test = self.loss.loss(y_test, activations_test)
@@ -314,14 +252,12 @@ class Dense_MLP:
                 metrics[i, 1] = loss_test
                 metrics[i, 2] = accuracy_train
                 metrics[i, 3] = accuracy_test
+                print("Testing time: ", t4 - t3,"; Loss train: ", loss_train, "; Loss test: ", loss_test, "; Accuracy train: ", accuracy_train,"; Accuracy test: ", accuracy_test,
+                      "; Maximum accuracy test: ", maximum_accuracy)
 
-                print(f"Testing time: {t4 - t3}\n; Loss test: {loss_test}; \n"
-                                 f"Accuracy test: {accuracy_test}; \n"
-                                 f"Maximum accuracy val: {maximum_accuracy}")
-
-            # save performance metrics values in a file
-            if (self.save_filename != ""):
-                np.savetxt(self.save_filename+".txt", metrics)
+                      # save performance metrics values in a file
+            if (save_filename != ""):
+                np.savetxt(save_filename, metrics)
 
         return metrics
 
@@ -342,63 +278,56 @@ class Dense_MLP:
         accuracy = compute_accuracy(activations, y_test)
         return accuracy, activations
 
-
-def load_fashion_mnist_data(noTrainingSamples, noTestingSamples):
+def load_fashion_mnist_data(noTrainingSamples,noTestingSamples):
     np.random.seed(0)
 
-    data = np.load("data/fashion_mnist.npz")
+    data=np.load("data/fashion_mnist.npz")
 
-    indexTrain = np.arange(data["X_train"].shape[0])
+    indexTrain=np.arange(data["X_train"].shape[0])
     np.random.shuffle(indexTrain)
 
-    indexTest = np.arange(data["X_test"].shape[0])
+    indexTest=np.arange(data["X_test"].shape[0])
     np.random.shuffle(indexTest)
 
-    X_train = data["X_train"][indexTrain[0:noTrainingSamples], :]
-    Y_train = data["Y_train"][indexTrain[0:noTrainingSamples], :]
-    X_test = data["X_test"][indexTest[0:noTestingSamples], :]
-    Y_test = data["Y_test"][indexTest[0:noTestingSamples], :]
+    X_train=data["X_train"][indexTrain[0:noTrainingSamples],:]
+    Y_train=data["Y_train"][indexTrain[0:noTrainingSamples],:]
+    X_test=data["X_test"][indexTest[0:noTestingSamples],:]
+    Y_test=data["Y_test"][indexTest[0:noTestingSamples],:]
 
-    # normalize in 0..1
+    #normalize in 0..1
     X_train = X_train.astype('float64') / 255.
     X_test = X_test.astype('float64') / 255.
 
-    return X_train, Y_train, X_test, Y_test
-
+    return X_train,Y_train,X_test,Y_test
 
 if __name__ == "__main__":
 
     for i in range(1):
         #load data
         noTrainingSamples = 10000 #max 60000 for Fashion MNIST
-        noTestingSamples = 5000  # max 10000 for Fashion MNIST
+        noTestingSamples = 5000  # max 10000 for Fshion MNIST
         X_train, Y_train, X_test, Y_test = load_fashion_mnist_data(noTrainingSamples,noTestingSamples)
 
         #set model parameters
         noHiddenNeuronsLayer = 1000
-        epsilon = 13  #set the sparsity level
         noTrainingEpochs = 500
         batchSize = 50
         dropoutRate = 0.2
-        learningRate = 0.05
-        momentum = 0.9
-        weightDecay = 0.0002
+        learningRate = 0.001
+        momentum=0.9
+        weightDecay=0.0002
 
         np.random.seed(i)
 
-        # create Dense-MLP ( fully-connected MLP)
-        fc_mlp = Dense_MLP(
-            (X_train.shape[1], noHiddenNeuronsLayer, noHiddenNeuronsLayer, noHiddenNeuronsLayer, Y_train.shape[1]),
-            (Relu, Relu, Relu, Sigmoid))
+        # create FC-MLP ( fully-connected MLP)
+        dense_mlp = Dense_MLP((X_train.shape[1], noHiddenNeuronsLayer, noHiddenNeuronsLayer, noHiddenNeuronsLayer, Y_train.shape[1]), (Relu, Relu, Relu, Softmax))
 
-        # train Dense-MLP
-        fc_mlp.fit(X_train, Y_train, X_test, Y_test, loss=MSE, epochs=noTrainingEpochs, batch_size=batchSize,
-                   learning_rate=learningRate,
-                   momentum=momentum, weight_decay=weightDecay, dropoutrate=dropoutRate, testing=True,
-                   save_filename="Results/fc_mlp_" + str(noTrainingSamples) + "_training_samples_rand" + str(
-                       i) + ".txt")
+        # train FC-MLP
+        dense_mlp.fit(X_train, Y_train, X_test, Y_test, loss=CrossEntropy, epochs=noTrainingEpochs, batch_size=batchSize, learning_rate=learningRate,
+                      momentum=momentum, weight_decay=weightDecay, dropoutrate=dropoutRate, testing=True,
+                      save_filename="Results/dense_mlp_"+str(noTrainingSamples)+"_training_samples_rand"+str(i))
 
         # test FC-MLP
-        accuracy, _ = fc_mlp.predict(X_test, Y_test, batch_size=1)
+        accuracy, _ = dense_mlp.predict(X_test, Y_test, batch_size=1)
 
         print("\nAccuracy of the last epoch on the testing data: ", accuracy)

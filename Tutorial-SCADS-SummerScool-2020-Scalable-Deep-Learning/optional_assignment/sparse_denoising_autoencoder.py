@@ -1,38 +1,14 @@
-# Authors: Decebal Constantin Mocanu et al.;
-# Code associated with SCADS Summer School 2020 tutorial "	Scalable Deep Learning Tutorial"; https://www.scads.de/de/summerschool2020
-# This is a pre-alpha free software and was tested in Windows 10 with Python 3.7.6, Numpy 1.17.2, SciPy 1.4.1, Numba 0.48.0
+#!/usr/bin/env python
 
-# If you use parts of this code please cite the following article:
-#@article{Mocanu2018SET,
-#  author =        {Mocanu, Decebal Constantin and Mocanu, Elena and Stone, Peter and Nguyen, Phuong H. and Gibescu, Madeleine and Liotta, Antonio},
-#  journal =       {Nature Communications},
-#  title =         {Scalable Training of Artificial Neural Networks with Adaptive Sparse Connectivity inspired by Network Science},
-#  year =          {2018},
-#  doi =           {10.1038/s41467-018-04316-3}
-#}
+'''
+Code for Spasre Autoencoder and Denoising Autoencoder using numpy
+author: Selima Curci
+email: s.curci@student.tue.nl
+'''
 
-# If you have space please consider citing also these articles
-
-#@phdthesis{Mocanu2017PhDthesis,
-#title = "Network computations in artificial intelligence",
-#author = "D.C. Mocanu",
-#year = "2017",
-#isbn = "978-90-386-4305-2",
-#publisher = "Eindhoven University of Technology",
-#}
-
-#@article{Liu2019onemillion,
-#  author =        {Liu, Shiwei and Mocanu, Decebal Constantin and Mocanu and Ramapuram Matavalam, Amarsagar Reddy and Pei, Yulong Pei and Pechenizkiy, Mykola},
-#  journal =       {arXiv:1901.09181},
-#  title =         {Sparse evolutionary Deep Learning with over one million artificial neurons on commodity hardware},
-#  year =          {2019},
-#}
-
-# We thank to:
-# Thomas Hagebols: for performing a thorough analyze on the performance of SciPy sparse matrix operations
-# Ritchie Vink (https://www.ritchievink.com): for making available on Github a nice Python implementation of fully connected MLPs. This SET-MLP implementation was built on top of his MLP code:
-#                                             https://github.com/ritchie46/vanilla-machine-learning/blob/master/vanilla_mlp.py
-
+import numpy as np
+import matplotlib.pyplot as plt
+import argparse
 from scipy.sparse import lil_matrix
 from scipy.sparse import coo_matrix
 from scipy.sparse import dok_matrix
@@ -112,7 +88,7 @@ def array_intersect(A, B):
     return np.in1d(A.view(dtype), B.view(dtype))  # boolean return
 
 
-class SET_MLP:
+class SET_MLP_Autoencoder:
     def __init__(self, dimensions, activations, epsilon=20):
         """
         :param dimensions: (tpl/ list) Dimensions of the neural net. (input, hidden layer, output)
@@ -523,7 +499,7 @@ def load_fashion_mnist_data(noTrainingSamples, noTestingSamples):
 
 if __name__ == "__main__":
 
-    for i in [4]:
+    for i in [1]:
 
         # load data
         noTrainingSamples = 10000 # max 60000 for Fashion MNIST
@@ -544,7 +520,7 @@ if __name__ == "__main__":
         np.random.seed(i)
 
         # create SET-MLP (MLP with adaptive sparse connectivity trained with Sparse Evolutionary Training)
-        set_mlp = SET_MLP((X_train.shape[1], noHiddenNeuronsLayer, noHiddenNeuronsLayer, noHiddenNeuronsLayer, Y_train.shape[1]), (Relu, Relu, Relu, Softmax), epsilon=epsilon)
+        set_mlp = SET_MLP_Autoencoder((X_train.shape[1], noHiddenNeuronsLayer, noHiddenNeuronsLayer, noHiddenNeuronsLayer, Y_train.shape[1]), (Relu, Relu, Relu, Softmax), epsilon=epsilon)
 
         # train SET-MLP
         set_mlp.fit(X_train, Y_train, X_test, Y_test, loss=CrossEntropy, epochs=noTrainingEpochs, batch_size=batchSize, learning_rate=learningRate,

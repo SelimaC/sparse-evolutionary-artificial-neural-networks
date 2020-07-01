@@ -35,7 +35,6 @@
 
 from scipy.sparse import lil_matrix
 from scipy.sparse import coo_matrix
-from scipy.sparse import dok_matrix
 from nn_functions import *
 import datetime
 import os
@@ -270,10 +269,6 @@ class FixProb_MLP:
         self.zeta = zeta
         self.droprate = dropoutrate
         self.save_filename = save_filename
-        self.inputLayerConnections = []
-        self.inputLayerConnections.append(self.getCoreInputConnections())
-        np.savez_compressed(self.save_filename + "_input_connections.npz",
-                            inputLayerConnections=self.inputLayerConnections)
 
         maximum_accuracy = 0
         metrics = np.zeros((epochs, 4))
@@ -369,11 +364,11 @@ def load_fashion_mnist_data(noTrainingSamples, noTestingSamples):
 
 if __name__ == "__main__":
 
-    for i in range(1):
+    for i in [3]:
         #load data
         noTrainingSamples = 10000 #max 60000 for Fashion MNIST
         noTestingSamples = 5000  # max 10000 for Fashion MNIST
-        X_train, Y_train, X_test, Y_test = load_fashion_mnist_data(noTrainingSamples,noTestingSamples)
+        X_train, Y_train, X_test, Y_test = load_fashion_mnist_data(noTrainingSamples, noTestingSamples)
 
         #set model parameters
         noHiddenNeuronsLayer = 1000
@@ -391,9 +386,9 @@ if __name__ == "__main__":
         fixprob_mlp = FixProb_MLP((X_train.shape[1], noHiddenNeuronsLayer, noHiddenNeuronsLayer,noHiddenNeuronsLayer, Y_train.shape[1]), (Relu, Relu, Relu, Softmax), epsilon=epsilon)
 
         # train FixProb-MLP
-        fixprob_mlp.fit(X_train, Y_train, X_test, Y_test, loss=MSE, epochs=noTrainingEpochs, batch_size=batchSize, learning_rate=learningRate,
+        fixprob_mlp.fit(X_train, Y_train, X_test, Y_test, loss=CrossEntropy, epochs=noTrainingEpochs, batch_size=batchSize, learning_rate=learningRate,
                     momentum=momentum, weight_decay=weightDecay, dropoutrate=dropoutRate, testing=True,
-                    save_filename="Results/fixprob_mlp_"+str(noTrainingSamples)+"_training_samples_e"+str(epsilon)+"_rand"+str(i)+".txt")
+                    save_filename="Results/fixprob_mlp_"+str(noTrainingSamples)+"_training_samples_e"+str(epsilon)+"_rand"+str(i))
 
         # test FixProb-MLP
         accuracy, _ = fixprob_mlp.predict(X_test, Y_test, batch_size=1)
