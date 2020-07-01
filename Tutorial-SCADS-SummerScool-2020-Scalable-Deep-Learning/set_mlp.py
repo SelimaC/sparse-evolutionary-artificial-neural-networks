@@ -534,8 +534,8 @@ if __name__ == "__main__":
         noHiddenNeuronsLayer = 1000
         epsilon = 13 # set the sparsity level
         zeta = 0.3 # in [0..1]. It gives the percentage of unimportant connections which are removed and replaced with random ones after every epoch
-        noTrainingEpochs = 200
-        batchSize = 40
+        noTrainingEpochs = 500
+        batchSize = 50
         dropoutRate = 0.2
         learningRate = 0.05
         momentum = 0.9
@@ -544,7 +544,7 @@ if __name__ == "__main__":
         np.random.seed(i)
 
         # create SET-MLP (MLP with adaptive sparse connectivity trained with Sparse Evolutionary Training)
-        set_mlp = SET_MLP((X_train.shape[1], noHiddenNeuronsLayer, noHiddenNeuronsLayer, noHiddenNeuronsLayer, Y_train.shape[1]), (Relu, Relu, Relu, Sigmoid), epsilon=epsilon)
+        set_mlp = SET_MLP((X_train.shape[1], noHiddenNeuronsLayer, noHiddenNeuronsLayer, noHiddenNeuronsLayer, Y_train.shape[1]), (Relu, Relu, Relu, Softmax), epsilon=epsilon)
 
         # train SET-MLP
         set_mlp.fit(X_train, Y_train, X_test, Y_test, loss=CrossEntropy, epochs=noTrainingEpochs, batch_size=batchSize, learning_rate=learningRate,
