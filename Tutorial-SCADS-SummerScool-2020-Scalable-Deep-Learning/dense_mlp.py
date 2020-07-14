@@ -302,7 +302,7 @@ def load_fashion_mnist_data(noTrainingSamples,noTestingSamples):
 
 if __name__ == "__main__":
 
-    for i in range(1):
+    for i in [5]:
         #load data
         noTrainingSamples = 10000 #max 60000 for Fashion MNIST
         noTestingSamples = 5000  # max 10000 for Fshion MNIST
