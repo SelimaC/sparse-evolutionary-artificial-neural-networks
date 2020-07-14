@@ -35,6 +35,7 @@
 from scipy.sparse import lil_matrix
 from scipy.sparse import coo_matrix
 from scipy.sparse import dok_matrix
+from scipy.sparse import csr_matrix
 from keras.preprocessing.image import ImageDataGenerator
 from keras import backend as K
 from utils.nn_functions import *
@@ -56,11 +57,6 @@ def backpropagation_updates_numpy(a, delta, rows, cols, out):
         for j in range(a.shape[0]):
             s += a[j, rows[i]] * delta[j, cols[i]]
         out[i] = s / a.shape[0]
-
-
-@njit(parallel=True, fastmath=True, cache=True)
-def compute_delta(delta, w, a):
-    return (delta @ w.transpose()) * a
 
 
 @njit(fastmath=True, cache=True)
@@ -211,11 +207,9 @@ class SET_MLP:
         for i in range(1, self.n_layers):
             z[i + 1] = a[i] @ self.w[i] + self.b[i]
             a[i + 1] = self.activations[i + 1].activation(z[i + 1])
-            if drop:
-                if i < self.n_layers - 1:
-                    # apply dropout
-                    a[i + 1], keep_mask = dropout(a[i + 1], self.dropout_rate)
-                    masks[i + 1] = keep_mask
+            if drop and i < self.n_layers - 1:
+                # apply dropout
+                a[i + 1], masks[i + 1] = dropout(a[i + 1], self.dropout_rate)
 
         return z, a, masks
 
@@ -251,14 +245,12 @@ class SET_MLP:
             self.n_layers - 1: (dw.tocsr(), np.mean(delta, axis=0))
         }
 
-
         # In case of three layer net will iterate over i = 2 and i = 1
         # Determine partial derivative and delta for the rest of the layers.
         # Each iteration requires the delta from the previous layer, propagating backwards.
         for i in reversed(range(2, self.n_layers)):
             # dropout for the backpropagation step
             if keep_prob != 1:
-                #delta = compute_delta(delta, self.w[i], self.activations[i].prime(z[i]))
                 delta = (delta @ self.w[i].transpose()) * self.activations[i].prime(z[i])
                 delta = delta * masks[i]
                 delta /= keep_prob
@@ -294,8 +286,8 @@ class SET_MLP:
             self.pdw[index] = self.momentum * self.pdw[index] - self.learning_rate * dw
             self.pdd[index] = self.momentum * self.pdd[index] - self.learning_rate * delta
 
-        self.w[index] += self.pdw[index] - self.weight_decay * self.w[index]
-        self.b[index] += self.pdd[index] - self.weight_decay * self.b[index]
+        self.w[index] += self.pdw[index] # - self.weight_decay * self.w[index]
+        self.b[index] += self.pdd[index] # - self.weight_decay * self.b[index]
 
     def train_on_batch(self, x, y):
         z, a, masks = self._feed_forward(x, True)

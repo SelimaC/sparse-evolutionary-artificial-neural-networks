@@ -14,6 +14,19 @@ class Relu:
         return z
 
 
+class InverseRelu:
+    @staticmethod
+    def activation(z):
+        z[z > 0] = 0
+        return - z
+
+    @staticmethod
+    def prime(z):
+        z[z > 0] = 0
+        z[z < 0] = -1
+        return z
+
+
 class LeakyRelu:
     @staticmethod
     def activation(z):
@@ -38,6 +51,25 @@ class Elu:
         z = np.where(z <= 0, Elu.activation(z) + 1, 1)
         return z
 
+
+class RReLu:
+    def __init__(self, n_neurons=None):
+        self.n_neurons = n_neurons
+        self.left_slopes = np.random.uniform(-1, 1, self.n_neurons)
+
+    def activation(self, z):
+        for i in range(self.n_neurons):
+            x = z[:,i]
+            x[x < 0] *= self.left_slopes[i]
+        return z
+
+    def prime(self, z):
+        for i in range(self.n_neurons):
+            x = z[:,i]
+            x[x < 0] = self.left_slopes[i]
+        #z[z < 0] = self.left_slopes
+        z[z > 0] = 1
+        return z
 
 class Swish:
     @staticmethod

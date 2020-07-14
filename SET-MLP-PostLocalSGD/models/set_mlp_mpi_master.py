@@ -417,7 +417,7 @@ class SET_MLP:
                 # print("Number of non zeros in W and PD matrix after evolution in layer",i,[(self.w[i].data.shape[0]), (self.pdw[i].data.shape[0])])
 
                 t_ev_2 = datetime.datetime.now()
-                print("Weights evolution time for layer", i, "is", t_ev_2 - t_ev_1)
+                # print("Weights evolution time for layer", i, "is", t_ev_2 - t_ev_1)
 
     def weights_evolution_III(self):
         # this represents the core of the SET procedure. It removes the weights closest to zero in each layer and add new random weights

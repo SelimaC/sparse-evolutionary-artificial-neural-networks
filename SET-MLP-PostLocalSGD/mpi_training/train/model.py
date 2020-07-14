@@ -46,7 +46,7 @@ class MPIModel(object):
         return np.asarray(self.model.test_on_batch(**args))
 
     def predict(self, x, y):
-        return self.model.predict(x, y, self.model.batch_size)
+        return self.model.predict(x, y, 100)
 
     def weight_evolution(self):
         return self.model.weights_evolution_II()

@@ -587,7 +587,7 @@ class MPIMaster(MPIProcess):
                                 self.logger.info(self.weights['w'][2].count_nonzero())
                                 self.logger.info(self.weights['w'][3].count_nonzero())
                                 self.logger.info(self.weights['w'][4].count_nonzero())
-                                #self.model.model.weightsEvolution_III()
+                                self.model.model.weights_evolution_III()
                                 t6 = datetime.datetime.now()
                                 self.logger.info(f"Weights evolution time  {t6 - t5}")
                                 self.evolution_time += (t6 - t5).seconds
@@ -747,7 +747,7 @@ class MPIMaster(MPIProcess):
         accuracy_test, activations_test = self.model.predict(self.data.x_test, self.data.y_test)
         accuracy_train, activations_train = self.model.predict(self.data.x_train, self.data.y_train)
         t4 = datetime.datetime.now()
-        self.best_val_acc = max(self.best_val_acc , accuracy_test)
+        self.best_val_acc = max(self.best_val_acc, accuracy_test)
         loss_test = self.model.compute_loss(self.data.y_test, activations_test)
         loss_train = self.model.compute_loss(self.data.y_train, activations_train)
         self.metrics[self.epoch-1, 0] = loss_train
@@ -763,7 +763,7 @@ class MPIMaster(MPIProcess):
         self.validate_time += (t4 - t3).seconds
 
         # save performance metrics values in a file
-        if (self.save_filename != ""):
+        if self.save_filename != "":
             np.savetxt(self.save_filename + ".txt", self.metrics)
 
         self.logger.debug("Ending validation")

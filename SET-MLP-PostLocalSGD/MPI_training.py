@@ -71,19 +71,19 @@ if __name__ == '__main__':
     parser.add_argument('--log-level', default='info', dest='log_level', help='log level (debug, info, warn, error)')
 
     # Model configuration
-    parser.add_argument('--batch-size', type=int, default=4096, help='input batch size for training (default: 64)')
-    parser.add_argument('--epochs', type=int, default=10,  help='number of epochs to train (default: 10)')
-    parser.add_argument('--lr', type=float, default=0.1, help='learning rate (default: 0.01)')
+    parser.add_argument('--batch-size', type=int, default=128, help='input batch size for training (default: 64)')
+    parser.add_argument('--epochs', type=int, default=50,  help='number of epochs to train (default: 10)')
+    parser.add_argument('--lr', type=float, default=0.01, help='learning rate (default: 0.01)')
     parser.add_argument('--lr-rate-decay', type=float, default=0.0, help='learning rate decay (default: 0)')
     parser.add_argument('--momentum', type=float, default=0.9, help='SGD momentum (default: 0.5)')
     parser.add_argument('--dropout-rate', type=float, default=0.3, help='Dropout rate')
-    parser.add_argument('--weight-decay', type=float, default=0.0002, help='Weight decay (l2 regularization)')
+    parser.add_argument('--weight-decay', type=float, default=0.0001, help='Weight decay (l2 regularization)')
     parser.add_argument('--epsilon', type=int, default=20, help='Sparsity level')
     parser.add_argument('--zeta', type=float, default=0.3,
                         help='It gives the percentage of unimportant connections which are removed and replaced with '
                              'random ones after every epoch(in [0..1])')
     parser.add_argument('--n-neurons', type=int, default=3000, help='Number of neurons in the hidden layer')
-    parser.add_argument('--seed', type=int, default=0, help='random seed (default: 1)')
+    parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10,
                         help='how many batches to wait before logging training status')
     parser.add_argument('--n-training-samples', type=int, default=50000, help='Number of training samples')
@@ -129,16 +129,7 @@ if __name__ == '__main__':
                     x_test=X_test, y_test=Y_test, augmentation=True)
     else:
         if rank != 0:
-            # Load augmented dataset
-            # partitions = shared_partitions(args.n_training_samples, num_workers, args.batch_size)
-            #
-            # X_train, Y_train, X_test, Y_test = load_cifar10_500K_data()
-            # data = Data(batch_size=args.batch_size, x_train=X_train[partitions[rank - 1]],
-            #             y_train=Y_train[partitions[rank - 1]],
-            #             x_test=X_test, y_test=Y_test)
-
-            # Load normal dataset
-
+            # Load dataset
             X_train, Y_train, X_test, Y_test = load_cifar10_data(args.n_training_samples, args.n_testing_samples)
             validate_every = int(X_train.shape[0] // args.batch_size)
             partitions = shared_partitions(X_train.shape[0], num_workers, args.batch_size)
@@ -149,8 +140,6 @@ if __name__ == '__main__':
 
             del X_train, Y_train, X_test, Y_test
         else:
-            # X_test = np.load('mpi_training/cifar10/x_test.npy', mmap_mode='r')
-            # Y_test = np.load('mpi_training/cifar10/y_test.npy', mmap_mode='r')
 
             X_train, Y_train,  X_test, Y_test = load_cifar10_data(args.n_training_samples, args.n_testing_samples)
 

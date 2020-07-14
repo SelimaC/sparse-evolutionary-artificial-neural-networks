@@ -57,7 +57,7 @@ class MomentumSGD(Optimizer):
         self.weight_decay = weight_decay
         self.momentum = momentum
 
-    def apply_update(self, weights, gradient):
+    def apply_update(self, weights, gradient, nesterov=True):
         """Move weights in the direction of the gradient, by the amount of the
             learning rate."""
 
@@ -75,8 +75,12 @@ class MomentumSGD(Optimizer):
                 weights['pdw'][index] = self.momentum * weights['pdw'][index] - self.learning_rate * dw
                 weights['pdd'][index] = self.momentum * weights['pdd'][index] - self.learning_rate * delta
 
-            weights['w'][index] += weights['pdw'][index] - self.weight_decay * weights['w'][index]
-            weights['b'][index] += weights['pdd'][index] - self.weight_decay * weights['b'][index]
+            if nesterov:
+                weights['w'][index] += self.momentum * weights['pdw'][index] - self.learning_rate * dw - self.weight_decay * weights['w'][index]
+                weights['b'][index] += self.momentum * weights['pdd'][index] - self.learning_rate * delta - self.weight_decay * weights['b'][index]
+            else:
+                weights['w'][index] += weights['pdw'][index] - self.weight_decay * weights['w'][index]
+                weights['b'][index] += weights['pdd'][index] - self.weight_decay * weights['b'][index]
 
         return weights
 

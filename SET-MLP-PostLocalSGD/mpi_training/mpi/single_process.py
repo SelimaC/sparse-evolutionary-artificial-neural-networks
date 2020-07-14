@@ -41,8 +41,8 @@ class MPISingleWorker(MPIWorker):
 
             if testing:
                 t3 = datetime.datetime.now()
-                accuracy_test, activations_test = self.model.predict(self.data.x_test, self.data.y_test)
-                accuracy_train, activations_train = self.model.predict(self.data.x_train, self.data.y_train)
+                accuracy_test, activations_test = self.model.predict(self.data.x_test.reshape(-1, 32 * 32 * 3), self.data.y_test)
+                accuracy_train, activations_train = self.model.predict(self.data.x_train.reshape(-1, 32 * 32 * 3), self.data.y_train)
                 t4 = datetime.datetime.now()
                 maximum_accuracy = max(maximum_accuracy, accuracy_test)
                 loss_test = self.model.compute_loss(self.data.y_test, activations_test)
