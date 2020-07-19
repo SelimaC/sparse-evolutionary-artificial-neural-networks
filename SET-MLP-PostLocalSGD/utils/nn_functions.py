@@ -40,6 +40,23 @@ class LeakyRelu:
         return z
 
 
+class LinearSigmoid:
+    @staticmethod
+    def activation(z):
+        p25 = np.percentile(z, 25)
+        p75 = np.percentile(z, 75)
+        z[(z > p25) & (z < p75)] = 0
+        return z
+
+    @staticmethod
+    def prime(z):
+        p25 = np.percentile(z, 25)
+        p75 = np.percentile(z, 75)
+        z[(z <= p25) | (z >= p75)] = 1
+        z[(z > p25) & (z < p75)] = 0
+        return z
+
+
 class Elu:
     @staticmethod
     def activation(z):
@@ -55,21 +72,21 @@ class Elu:
 class RReLu:
     def __init__(self, n_neurons=None):
         self.n_neurons = n_neurons
-        self.left_slopes = np.random.uniform(-1, 1, self.n_neurons)
+        if n_neurons == 4000:
+            self.left_slopes = np.random.uniform(-0.75, 0.75, self.n_neurons)
+        else:
+            self.left_slopes = np.random.uniform(-0.75, 0.75, self.n_neurons)
 
     def activation(self, z):
         for i in range(self.n_neurons):
-            x = z[:,i]
-            x[x < 0] *= self.left_slopes[i]
+            z[:, i] = np.where(z[:, i] < 0, z[:, i] * self.left_slopes[i], z[:,i])
         return z
 
     def prime(self, z):
         for i in range(self.n_neurons):
-            x = z[:,i]
-            x[x < 0] = self.left_slopes[i]
-        #z[z < 0] = self.left_slopes
-        z[z > 0] = 1
+            z[:, i] = np.where(z[:, i] < 0,  self.left_slopes[i], 1)
         return z
+
 
 class Swish:
     @staticmethod

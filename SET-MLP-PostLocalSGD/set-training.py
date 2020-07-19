@@ -100,11 +100,11 @@ if __name__ == "__main__":
         print("Number of neurons per layer:", X_train.shape[1], n_hidden_neurons, n_hidden_neurons,
               n_hidden_neurons, Y_train.shape[1])
 
-        set_mlp = SET_MLP((3072, 4000, 1000, 4000,10),
-                          (InverseRelu, Relu, InverseRelu, Softmax), **config)
+        set_mlp = SET_MLP((3072, 4000, 1000, 4000, 10),
+                          (RReLu(4000), RReLu(1000), RReLu(4000), Softmax), **config)
         start_time = time.time()
         set_mlp.fit_generator(X_train, Y_train, X_test, Y_test, testing=True,
-                    save_filename=r"Results/inverse_relu_inverse_augmented_set_mlp_sequential_cifar10_" +
+                    save_filename=r"Results/rrelu_augmented_set_mlp_sequential_cifar10_" +
                                   str(n_training_samples) + "_training_samples_e" + str(
                         epsilon) + "_rand" + str(i))
         step_time = time.time() - start_time

@@ -51,21 +51,48 @@ class MomentumSGD(Optimizer):
     """Stochastic gradient descent with momentum and weight decay
           learning_rate: learning rate parameter for SGD"""
 
-    def __init__(self, lr, weight_decay, momentum):
+    def __init__(self, lr, weight_decay, momentum, n_workers):
         super(MomentumSGD, self).__init__()
         self.learning_rate = lr
+        self.base_lr = 0.01
+        self.epoch = 0
         self.weight_decay = weight_decay
         self.momentum = momentum
+        self.lr_decay = 0.1
+        self.milestones = [5, 100, 175]
+        self.current_milestone = 0
+        self.n_workers = n_workers
 
-    def apply_update(self, weights, gradient, nesterov=True):
+    def apply_update(self, weights, gradient, epoch=0, nesterov=True):
         """Move weights in the direction of the gradient, by the amount of the
             learning rate."""
 
+        self.epoch = epoch
+
+        # Leaning rate scheduler
+        # if self.epoch <= 5:  # Gradually warmup phase
+        #     old_lr = self.learning_rate
+        #     self.learning_rate = self.base_lr * ((self.n_workers - 1.0) * self.epoch / 5 + 1.0)
+        #     self.momentum *= (self.learning_rate / old_lr)
+        #     self.momentum = min(0.99, self.momentum)
+
+        if self.epoch >= 100:  # First decay
+            old_lr = self.learning_rate
+            self.learning_rate *= self.lr_decay
+            # self.momentum *= (self.learning_rate / old_lr)
+            # self.momentum = min(0.99, self.momentum)
+
+        if self.epoch >= 150:  # Second decay
+            self.learning_rate *= self.lr_decay
+            old_lr = self.learning_rate
+            # self.momentum *= (self.learning_rate / old_lr)
+            # self.momentum = min(0.99, self.momentum)
+        # logging.info(f"Epoch {self.epoch}, learning rate {self.learning_rate}, momentum {self.momentum}")
         for index, v in gradient.items():
             dw = v[0]
             delta = v[1]
 
-            #dw = retain_valid_updates(weights['w'][index], dw)
+            dw = retain_valid_updates(weights['w'][index], dw)
 
             # perform the update with momentum
             if index not in weights['pdw']:

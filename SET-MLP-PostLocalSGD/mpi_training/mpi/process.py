@@ -29,6 +29,8 @@ class MPIProcess(object):
            num_epochs: integer giving the number of epochs to train for
            stop_training: becomes true when it is time to stop training
            idle_time: kep track of process' idle time
+           validate_time: kep track of process' validation time
+           evolution_time: kep track of process' evolution time
     """
 
     def __init__(self, parent_comm, process_comm, parent_rank=None, num_epochs=1, data=None, algo=None,
@@ -120,17 +122,6 @@ class MPIProcess(object):
         """Display metrics computed during training or validation"""
         self.model.print_metrics(metrics)
 
-    def get_logs(self, metrics, val=False):
-        """Get dictionary of logs computed during training.
-            If val is True, appends 'val' to the beginning of each metric name"""
-        MPI.COMM_WORLD.Abort()
-        if val:
-            return {'val_' + name: np.asscalar(metric) for name, metric in
-                    zip(self.model.metrics_names(), metrics)}
-        else:
-            return {name: np.asscalar(metric) for name, metric in
-                    zip(self.model.metrics_names(), metrics)}
-
     def do_send_sequence(self):
         """Actions to take when sending an update to parent:
             -Send the update (if the parent accepts it)
@@ -151,7 +142,13 @@ class MPIProcess(object):
     def apply_update(self):
         """Updates weights according to update received from worker process"""
         with np.errstate(divide='raise', invalid='raise', over='raise'):
-            self.weights = self.algo.apply_update(self.weights, self.update)
+            self.weights = self.algo.apply_update(self.weights, self.update, self.epoch)
+            self.model.set_weights(self.weights)
+
+    def average_model(self):
+        """Average model according to update received from worker process"""
+        with np.errstate(divide='raise', invalid='raise', over='raise'):
+            self.weights = self.algo.apply_update(self.weights, self.update, self.epoch)
             self.model.set_weights(self.weights)
 
     ### MPI-related functions below ###
@@ -401,6 +398,12 @@ class MPIWorker(MPIProcess):
             if self.monitor:
                 self.monitor.start_monitor()
 
+            if epoch >= 100:
+                self.algo.sync_every = 2
+
+            if epoch >= 150:
+                self.algo.sync_every = 4
+
             self.data.shuffle()
 
             for j in range(self.data.x_train.shape[0] // self.data.batch_size):
@@ -594,9 +597,7 @@ class MPIMaster(MPIProcess):
 
                             self.weights = self.model.get_weights()
                             self.logger.info(f"Master epoch {self.epoch + 1}")
-
                 else:
-
                     self.apply_update()
                     if self.is_synchronous():
                         self.update = {}
@@ -609,13 +610,13 @@ class MPIMaster(MPIProcess):
                             self.validate(self.weights)
                             if self.epoch < self.num_epochs - 1:
                                 t5 = datetime.datetime.now()
-                                #self.model.weight_evolution()
+                                self.model.weight_evolution()
                                 t6 = datetime.datetime.now()
                                 self.logger.info(f"Weights evolution time  {t6 - t5}")
                                 self.evolution_time += (t6 - t5).seconds
                                 self.weights = self.model.get_weights()
 
-                            self.logger.info(f"Master epoch {self.epoch+1}")
+                            self.logger.info(f"Master epoch {self.epoch}, timestep {self.time_step}")
 
                     self.sync_parent()
                     self.sync_children()
