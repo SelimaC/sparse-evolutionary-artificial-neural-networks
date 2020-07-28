@@ -101,7 +101,7 @@ if __name__ == "__main__":
               n_hidden_neurons, Y_train.shape[1])
 
         set_mlp = SET_MLP((3072, 4000, 1000, 4000, 10),
-                          (RReLu(4000), RReLu(1000), RReLu(4000), Softmax), **config)
+                          (RunningMeanReLU(), Relu(), RunningMeanReLU(), Softmax), **config)
         start_time = time.time()
         set_mlp.fit_generator(X_train, Y_train, X_test, Y_test, testing=True,
                     save_filename=r"Results/rrelu_augmented_set_mlp_sequential_cifar10_" +

@@ -21,8 +21,9 @@ class Data(object):
         self.x_test = x_test
         self.y_test = y_test
         self.batch_size = batch_size
+        self.augmentation= augmentation
 
-        if augmentation:
+        if self.augmentation:
             self.datagen = ImageDataGenerator(
                 featurewise_center=False,  # set input mean to 0 over the dataset
                 samplewise_center=False,  # set each sample mean to 0
@@ -55,15 +56,19 @@ class Data(object):
         else:
             self.datagen = None
 
-    def inf_generate_data(self):
+    def generate_data(self):
         while True:
             try:
-                for B in self.generate_data():
-                    yield B
+                if self.augmentation:
+                    for B in self.generate_augmented_data():
+                        yield B
+                else:
+                    for B in self.generate_train_data():
+                        yield B
             except StopIteration:
                 logging.warning("start over generator loop")
 
-    def generate_data(self):
+    def generate_augmented_data(self):
         """Yields batches of augmented training data until none are left."""
         output_generator = self.datagen.flow(self.x_train, self.y_train, batch_size=self.batch_size)
         for j in range(self.x_train.shape[0] // self.batch_size):
@@ -80,6 +85,14 @@ class Data(object):
 
             yield self.x_test[start_pos:end_pos], self.y_test[start_pos:end_pos]
 
+    def generate_train_data(self):
+        """Yields batches of training data until none are left."""
+        for j in range(self.x_train.shape[0] // self.batch_size):
+            start_pos = j * self.batch_size
+            end_pos = (j + 1) * self.batch_size
+
+            yield self.x_train[start_pos:end_pos], self.x_train[start_pos:end_pos]
+
     def count_data(self):
         return self.x_train.shape[0]
 
@@ -91,6 +104,24 @@ class Data(object):
 
     def is_numpy_array(self, data):
         return isinstance(data, np.ndarray)
+
+    def get_train_data(self):
+        if self.augmentation:
+            return self.x_train.reshape(-1, 32 * 32 * 3)
+        else:
+            return self.x_train
+
+    def get_test_data(self):
+        if self.augmentation:
+            return self.x_test.reshape(-1, 32 * 32 * 3)
+        else:
+            return self.x_test
+
+    def get_train_labels(self):
+        return self.y_train
+
+    def get_test_labels(self):
+        return self.y_test
 
     def get_num_samples(self, data):
         """Input: dataset consisting of a numpy array or list of numpy arrays.

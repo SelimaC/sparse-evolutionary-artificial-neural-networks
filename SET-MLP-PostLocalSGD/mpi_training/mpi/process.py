@@ -139,7 +139,7 @@ class MPIProcess(object):
         self.algo.set_worker_model_weights(self.model, self.weights, self.gradients)
         self.update = {}
 
-    def apply_update(self):
+    def apply_update(self, sync=False):
         """Updates weights according to update received from worker process"""
         with np.errstate(divide='raise', invalid='raise', over='raise'):
             self.weights = self.algo.apply_update(self.weights, self.update, self.epoch)
@@ -406,9 +406,7 @@ class MPIWorker(MPIProcess):
 
             self.data.shuffle()
 
-            for j in range(self.data.x_train.shape[0] // self.data.batch_size):
-                k = j * self.data.batch_size
-                l = (j + 1) * self.data.batch_size
+            for x_b, y_b in self.data.generate_data():
 
                 if self.process_comm:
                     # broadcast the weights to all processes
@@ -416,7 +414,7 @@ class MPIWorker(MPIProcess):
                     if self.process_comm.Get_rank() != 0:
                         self.model.set_weights(self.weights)
 
-                tmp = self.model.train_on_batch(x=self.data.x_train[k:l], y=self.data.y_train[k:l])
+                tmp = self.model.train_on_batch(x=x_b, y=y_b)
                 for index, v in tmp.items():
                     dw = v[0]
                     delta = v[1]
@@ -434,12 +432,14 @@ class MPIWorker(MPIProcess):
 
             if testing:
                 t3 = datetime.datetime.now()
-                accuracy_test, activations_test = self.model.predict(self.data.x_test, self.data.y_test)
-                accuracy_train, activations_train = self.model.predict(self.data.x_train, self.data.y_train)
+                accuracy_test, activations_test = self.model.predict(self.data.get_test_data(),
+                                                                     self.data.get_test_labels())
+                accuracy_train, activations_train = self.model.predict(self.data.get_train_data(),
+                                                                       self.data.get_train_labels())
                 t4 = datetime.datetime.now()
                 maximum_accuracy = max(maximum_accuracy, accuracy_test)
-                loss_test = self.model.compute_loss(self.data.y_test, activations_test)
-                loss_train = self.model.compute_loss(self.data.y_train, activations_train)
+                loss_test = self.model.compute_loss( self.data.get_test_labels(), activations_test)
+                loss_train = self.model.compute_loss(self.data.get_train_labels(), activations_train)
                 metrics[epoch - 1, 0] = loss_train
                 metrics[epoch - 1, 1] = loss_test
                 metrics[epoch - 1, 2] = accuracy_train
@@ -576,7 +576,7 @@ class MPIMaster(MPIProcess):
 
                     self.sync_parent()
                     self.sync_children()
-                    self.apply_update()
+                    self.apply_update(sync=self.is_synchronous())
 
                     if self.algo.validate_every > 0 and self.time_step > 0:
                         if self.time_step % self.algo.validate_every == 0:
@@ -598,7 +598,7 @@ class MPIMaster(MPIProcess):
                             self.weights = self.model.get_weights()
                             self.logger.info(f"Master epoch {self.epoch + 1}")
                 else:
-                    self.apply_update()
+                    self.apply_update(sync=self.is_synchronous())
                     if self.is_synchronous():
                         self.update = {}
 
@@ -608,6 +608,7 @@ class MPIMaster(MPIProcess):
                             self.biases_to_save.append(self.weights['b'])
 
                             self.validate(self.weights)
+                            self.epoch += 1
                             if self.epoch < self.num_epochs - 1:
                                 t5 = datetime.datetime.now()
                                 self.model.weight_evolution()
@@ -620,10 +621,6 @@ class MPIMaster(MPIProcess):
 
                     self.sync_parent()
                     self.sync_children()
-
-            if self.algo.validate_every > 0 and self.time_step > 0:
-                if self.time_step % self.algo.validate_every == 0:
-                    self.epoch += 1
         else:
             self.sync_child(source)
 
@@ -745,12 +742,12 @@ class MPIMaster(MPIProcess):
 
         self.logger.debug("Starting validation")
         t3 = datetime.datetime.now()
-        accuracy_test, activations_test = self.model.predict(self.data.x_test, self.data.y_test)
-        accuracy_train, activations_train = self.model.predict(self.data.x_train, self.data.y_train)
+        accuracy_test, activations_test = self.model.predict(self.data.get_test_data(), self.data.get_test_labels())
+        accuracy_train, activations_train = self.model.predict(self.data.get_train_data(), self.data.get_train_labels())
         t4 = datetime.datetime.now()
         self.best_val_acc = max(self.best_val_acc, accuracy_test)
-        loss_test = self.model.compute_loss(self.data.y_test, activations_test)
-        loss_train = self.model.compute_loss(self.data.y_train, activations_train)
+        loss_test = self.model.compute_loss(self.data.get_test_labels(), activations_test)
+        loss_train = self.model.compute_loss(self.data.get_train_labels(), activations_train)
         self.metrics[self.epoch-1, 0] = loss_train
         self.metrics[self.epoch-1, 1] = loss_test
         self.metrics[self.epoch-1, 2] = accuracy_train

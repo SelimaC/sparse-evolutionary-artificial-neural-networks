@@ -88,6 +88,27 @@ class RReLu:
         return z
 
 
+class RunningMeanReLU:
+    def __init__(self):
+        self.mean = 0
+        self.n_batches = 0
+
+    def activation(self, z):
+        if self.n_batches == 0:
+            self.mean = z.mean(axis=0)
+            self.n_batches += 1
+        else:
+            self.n_batches += 1
+            self.mean = (self.mean + z.mean(axis=0)) / 2
+
+        np.where(z > self.mean, z,  - z*0.75)
+        return z
+
+    def prime(self, z):
+        np.where(z > self.mean, 1, - 0.75)
+        return z
+
+
 class Swish:
     @staticmethod
     def activation(z):
