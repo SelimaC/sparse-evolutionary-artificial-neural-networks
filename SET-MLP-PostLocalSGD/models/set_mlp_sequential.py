@@ -144,6 +144,9 @@ class SET_MLP:
         self.dropout_rate = config['dropout_rate']  # dropout rate
         self.dimensions = dimensions
         self.batch_size = config['batch_size']
+        self.training_time = 0
+        self.testing_time = 0
+        self.evolution_time = 0
 
         # Weights and biases are initiated by index. For a one hidden layer net you will have a w[1] and w[2]
         self.w = {}
@@ -452,6 +455,7 @@ class SET_MLP:
             print("\nSET-MLP Epoch ", i)
             print("Training time: ", t2 - t1)
             print("Backpropagation time: ", back_propagation_total_time)
+            self.training_time += (t2 - t1).seconds
 
             # test model performance on the test data at each epoch
             # this part is useful to understand model performance and can be commented for production settings
@@ -470,6 +474,7 @@ class SET_MLP:
                 print(f"Testing time: {t4 - t3}\n; Loss test: {loss_test}; \n"
                       f"Accuracy test: {accuracy_test}; \n"
                       f"Maximum accuracy val: {maximum_accuracy}")
+                self.testing_time += (t4 - t3).seconds
             weights.append(self.w)
             biases.append(self.b)
             t5 = datetime.datetime.now()
@@ -478,6 +483,7 @@ class SET_MLP:
                 self.weights_evolution_II()  # this implementation has the same behaviour as the one above, but it is much faster.
             t6 = datetime.datetime.now()
             print("Weights evolution time ", t6 - t5)
+            self.evolution_time += (t6 - t5).seconds
             K.clear_session()
 
             print(self.w[1].count_nonzero())

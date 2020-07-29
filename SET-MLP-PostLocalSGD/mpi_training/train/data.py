@@ -15,13 +15,14 @@ class Data(object):
           batch_size: size of training batches
     """
 
-    def __init__(self, x_train, y_train, x_test, y_test, batch_size, augmentation=False):
+    def __init__(self, x_train, y_train, x_test, y_test, batch_size, augmentation=False, dataset='cifar10'):
         self.x_train = x_train
         self.y_train = y_train
         self.x_test = x_test
         self.y_test = y_test
         self.batch_size = batch_size
-        self.augmentation= augmentation
+        self.augmentation = (augmentation and dataset == 'cifar10')
+        self.dataset = dataset
 
         if self.augmentation:
             self.datagen = ImageDataGenerator(

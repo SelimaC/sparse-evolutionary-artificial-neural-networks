@@ -13,7 +13,7 @@ parser.add_argument('--batch-size', type=int, default=128, metavar='N',
                     help='input batch size for training (default: 64)')
 parser.add_argument('--test-batch-size', type=int, default=3000, metavar='N',
                     help='input batch size for testing (default: 1000)')
-parser.add_argument('--epochs', type=int, default=1000, metavar='N',
+parser.add_argument('--epochs', type=int, default=200, metavar='N',
                     help='number of epochs to train (default: 10)')
 parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
                     help='learning rate (default: 0.01)')
@@ -101,7 +101,7 @@ if __name__ == "__main__":
               n_hidden_neurons, Y_train.shape[1])
 
         set_mlp = SET_MLP((3072, 4000, 1000, 4000, 10),
-                          (RunningMeanReLU(), Relu(), RunningMeanReLU(), Softmax), **config)
+                          (Relu(), Relu(), Relu(), Softmax), **config)
         start_time = time.time()
         set_mlp.fit_generator(X_train, Y_train, X_test, Y_test, testing=True,
                     save_filename=r"Results/rrelu_augmented_set_mlp_sequential_cifar10_" +
@@ -109,6 +109,9 @@ if __name__ == "__main__":
                         epsilon) + "_rand" + str(i))
         step_time = time.time() - start_time
         print("\nTotal training time: ", step_time)
+        print("\nTraining time: ", set_mlp.training_time)
+        print("\nTesting time: ", set_mlp.testing_time)
+        print("\nEvolution time: ", set_mlp.evolution_time)
 
         # Test SET-MLP
         accuracy, _ = set_mlp.predict(X_test.reshape(-1, 32 * 32 * 3), Y_test, batch_size=1)

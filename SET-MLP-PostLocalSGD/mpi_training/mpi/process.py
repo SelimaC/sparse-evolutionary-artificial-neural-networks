@@ -387,74 +387,50 @@ class MPIWorker(MPIProcess):
         self.check_sanity()
         self.await_signal_from_parent()
 
-        maximum_accuracy = 0
-        metrics = np.zeros((self.num_epochs, 6))
+        num_batches = 0
+        epoch = 0
+        batches_per_epoch = self.data.get_train_data().shape[0] / self.data.batch_size
 
         self.model.set_weights(self.weights)
 
-        for epoch in range(1, self.num_epochs + 1):
-            self.logger.info("Beginning epoch {:d}".format(self.epoch + epoch))
-
+        for x_b, y_b in self.data.generate_data():
+            num_batches += 1
             if self.monitor:
                 self.monitor.start_monitor()
 
-            if epoch >= 100:
-                self.algo.sync_every = 2
+            if self.process_comm:
+                # broadcast the weights to all processes
+                self.bcast_weights(comm=self.process_comm)
+                if self.process_comm.Get_rank() != 0:
+                    self.model.set_weights(self.weights)
 
-            if epoch >= 150:
-                self.algo.sync_every = 4
+            tmp = self.model.train_on_batch(x=x_b, y=y_b)
+            for index, v in tmp.items():
+                dw = v[0]
+                delta = v[1]
 
-            self.data.shuffle()
+                if index not in self.update:
+                    self.update[index] = (dw, delta)
+                else:
+                    self.update[index] = (self.update[index][0] + dw, self.update[index][1] + delta)
 
-            for x_b, y_b in self.data.generate_data():
+            if self.algo.should_sync():
+                self.sync_with_parent()
 
-                if self.process_comm:
-                    # broadcast the weights to all processes
-                    self.bcast_weights(comm=self.process_comm)
-                    if self.process_comm.Get_rank() != 0:
-                        self.model.set_weights(self.weights)
+            if num_batches % batches_per_epoch == 0:
+                self.logger.info("Finishing epoch {:d}".format(self.epoch + epoch))
 
-                tmp = self.model.train_on_batch(x=x_b, y=y_b)
-                for index, v in tmp.items():
-                    dw = v[0]
-                    delta = v[1]
+                if epoch > self.num_epochs:
+                    break
 
-                    if index not in self.update:
-                        self.update[index] = (dw, delta)
-                    else:
-                        self.update[index] = (self.update[index][0] + dw, self.update[index][1] + delta)
+                epoch += 1
+                if epoch >= 100:
+                    self.algo.sync_every = 2
+                if epoch >= 150:
+                    self.algo.sync_every = 4
 
-                if self.algo.should_sync():
-                    self.sync_with_parent()
-
-            if self.monitor:
-                self.monitor.stop_monitor()
-
-            if testing:
-                t3 = datetime.datetime.now()
-                accuracy_test, activations_test = self.model.predict(self.data.get_test_data(),
-                                                                     self.data.get_test_labels())
-                accuracy_train, activations_train = self.model.predict(self.data.get_train_data(),
-                                                                       self.data.get_train_labels())
-                t4 = datetime.datetime.now()
-                maximum_accuracy = max(maximum_accuracy, accuracy_test)
-                loss_test = self.model.compute_loss( self.data.get_test_labels(), activations_test)
-                loss_train = self.model.compute_loss(self.data.get_train_labels(), activations_train)
-                metrics[epoch - 1, 0] = loss_train
-                metrics[epoch - 1, 1] = loss_test
-                metrics[epoch - 1, 2] = accuracy_train
-                metrics[epoch - 1, 3] = accuracy_test
-
-                self.logger.debug("Validation metrics:")
-                self.logger.debug(f"Testing time: {t4 - t3}\n; Loss test: {loss_test}; \n"
-                                  f"Accuracy test: {accuracy_test}; \n"
-                                  f"Maximum accuracy val: {maximum_accuracy}")
-                # save performance metrics values in a file
-                if (self.save_filename != ""):
-                    np.savetxt(self.save_filename + ".txt", metrics)
-
-            if self.stop_training:
-                break
+                if self.monitor:
+                    self.monitor.stop_monitor()
 
         self.logger.debug("Signing off")
         self.logger.info(f"Worker idle time: {self.idle_time}")

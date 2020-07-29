@@ -2,7 +2,7 @@ from models.set_mlp_mpi import *
 import logging
 
 
-class MPIModel(object):
+class SETMPIModel(object):
     """Class that abstract all details of the model
     """
 
