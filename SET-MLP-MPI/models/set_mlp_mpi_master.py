@@ -73,16 +73,28 @@ def find_last_pos(array, value):
     return array.shape[0] - idx
 
 
-def createSparseWeights(epsilon, noRows, noCols):
+def createSparseWeights_II(epsilon, noRows, noCols):
     limit = np.sqrt(6. / float(noRows + noCols))
 
+    mask_weights = np.random.rand(noRows, noCols)
+    prob = 1 - (epsilon * (noRows + noCols)) / (noRows * noCols)  # normal tp have 8x connections
     # generate an Erdos Renyi sparse weights mask
-    weights = lil_matrix((noRows, noCols), dtype='float32')
-    for i in range(epsilon * (noRows + noCols)):
-        weights[np.random.randint(0, noRows), np.random.randint(0, noCols)] = np.float32(np.random.uniform(-limit, limit))
+    weights = lil_matrix((noRows, noCols))
+    n_params = np.count_nonzero(mask_weights[mask_weights >= prob])
+    weights[mask_weights >= prob] = np.random.uniform(-limit, limit, n_params)
     print("Create sparse matrix with ", weights.getnnz(), " connections and ",
-          (weights.getnnz() / (noRows * noCols)) * 100, "% density level")
+           (weights.getnnz() / (noRows * noCols)) * 100, "% density level")
     weights = weights.tocsr()
+    return weights
+
+
+def createSparseWeights(epsilon,noRows,noCols):
+    # generate an Erdos Renyi sparse weights mask
+    weights=lil_matrix((noRows, noCols))
+    for i in range(epsilon * (noRows + noCols)):
+        weights[np.random.randint(0,noRows),np.random.randint(0,noCols)]=np.float64(np.random.randn()/10)
+    print ("Create sparse matrix with ",weights.getnnz()," connections and ",(weights.getnnz()/(noRows * noCols))*100,"% density level")
+    weights=weights.tocsr()
     return weights
 
 
@@ -128,17 +140,17 @@ class SET_MLP:
         self.pdd = {}
         self.activations = {}
 
-        for i in range(len(dimensions) - 2):
+        for i in range(len(dimensions) - 1):
             self.w[i + 1] = createSparseWeights(self.epsilon, dimensions[i],
                                                 dimensions[i + 1])  # create sparse weight matrices
             self.b[i + 1] = np.zeros(dimensions[i + 1], dtype='float32')
             self.activations[i + 2] = activations[i]
 
-        limit = np.sqrt(6. / float(dimensions[-2] + dimensions[-1]))
-        self.w[len(dimensions) - 1] = csr_matrix(np.random.uniform(-limit, limit,
-                                                                   (dimensions[-2], dimensions[-1])), dtype='float32')
-        self.b[len(dimensions) - 1] = np.zeros(dimensions[-1], dtype='float32')
-        self.activations[len(dimensions)] = activations[-1]
+        # limit = np.sqrt(6. / float(dimensions[-2] + dimensions[-1]))
+        # self.w[len(dimensions) - 1] = csr_matrix(np.random.uniform(-limit, limit,
+        #                                                            (dimensions[-2], dimensions[-1])), dtype='float32')
+        # self.b[len(dimensions) - 1] = np.zeros(dimensions[-1], dtype='float32')
+        # self.activations[len(dimensions)] = activations[-1]
 
         # print("Creation sparse weights time: ", t2 - t1)
         if config['loss'] == 'mse':
@@ -327,7 +339,7 @@ class SET_MLP:
     def weightsEvolution_II(self):
         # this represents the core of the SET procedure. It removes the weights closest to zero in each layer and add new random weights
         #evolve all layers, except the one from the last hidden layer to the output layer
-        for i in range(1, self.n_layers - 1):
+        for i in range(1, self.n_layers):
             # uncomment line below to stop evolution of dense weights more than 80% non-zeros
             #if(self.w[i].count_nonzero()/(self.w[i].get_shape()[0]*self.w[i].get_shape()[1]) < 0.8):
                 t_ev_1 = datetime.datetime.now()

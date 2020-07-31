@@ -3,7 +3,9 @@ import os
 import numpy as np
 from sklearn.model_selection import train_test_split
 import joblib
+import matplotlib.pyplot as plt
 import pickle
+import seaborn as sns
 import h5py
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from keras.datasets import cifar10, mnist
@@ -47,8 +49,8 @@ def load_mnist_data(n_training_samples, n_testing_samples):
     # Normalize data
     x_train = x_train / 255.
     x_test = x_test / 255.
-    x_train = x_train.reshape(-1, 28 * 28).astype('float32')
-    x_test = x_test.reshape(-1, 28 * 28).astype('float32')
+    x_train = x_train.astype('float32')
+    x_test = x_test.astype('float32')
 
     return x_train, y_train, x_test, y_test
 
@@ -138,11 +140,27 @@ def load_cifar10_data_not_flattened(n_training_samples, n_testing_samples):
     x_test = x_test[index_test[0:n_testing_samples], :]
     y_test = y_test[index_test[0:n_testing_samples], :]
 
+    # sns.distplot(x_train, hist=False, kde=True,
+    #                           kde_kws={'linewidth': 3}, label='Train data')
+    # plt.show()
+
+    # sns.distplot(x_test, hist=False, kde=True,
+    #              kde_kws={'linewidth': 3}, label='Test data')
+    # plt.show()
+
     # Normalize data
     x_train_mean = np.mean(x_train, axis=0)
     x_train_std = np.std(x_train, axis=0)
     x_train = (x_train - x_train_mean) / x_train_std
     x_test = (x_test - x_train_mean) / x_train_std
+
+    # sns.distplot(x_train, hist=False, kde=True,
+    #              kde_kws={'linewidth': 3},label='Train data')
+    # plt.show()
+    #
+    # sns.distplot(x_test, hist=False, kde=True,
+    #              kde_kws={'linewidth': 3}, label='Test data')
+    # plt.show()
 
     return x_train, y_train, x_test, y_test
 

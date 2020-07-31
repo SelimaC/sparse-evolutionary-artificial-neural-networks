@@ -222,7 +222,11 @@ class SET_MLP:
         masks = {}
 
         for i in range(1, self.n_layers):
+
+            # sum_incoming_weights = np.abs(self.w[i].toarray()).sum(axis=0)
+            # probs = (sum_incoming_weights - sum_incoming_weights.min()) / (sum_incoming_weights.max() - sum_incoming_weights.min())
             z[i + 1] = a[i] @ self.w[i] + self.b[i]
+
             a[i + 1] = self.activations[i + 1].activation(z[i + 1])
             if drop:
                 if i < self.n_layers - 1:
@@ -269,7 +273,8 @@ class SET_MLP:
         # Determine partial derivative and delta for the rest of the layers.
         # Each iteration requires the delta from the previous layer, propagating backwards.
         for i in reversed(range(2, self.n_layers)):
-
+            # sum_incoming_weights = np.abs(self.w[i-1].toarray()).sum(axis=0)
+            # probs = (sum_incoming_weights - sum_incoming_weights.min()) / (sum_incoming_weights.max() - sum_incoming_weights.min())
             if keep_prob != 1:
                 delta = (delta @ self.w[i].transpose()) * self.activations[i].prime(z[i])
                 delta = delta * masks[i]
@@ -288,11 +293,7 @@ class SET_MLP:
         for k, v in update_params.items():
             self._update_w_b(k, v[0], v[1])
 
-        # with ThreadPoolExecutor() as executor:
-        #     k, v = update_params.items()
-        #     results = executor.map(self._update_w_b, k, v[0], v[1])
-
-    def _update_w_b(self, index, dw, delta):
+    def _update_w_b(self, index, dw, delta, nesterov=False):
         """
         Update weights and biases.
 
@@ -308,9 +309,13 @@ class SET_MLP:
         else:
             self.pdw[index] = self.momentum * self.pdw[index] - self.learning_rate * dw
             self.pdd[index] = self.momentum * self.pdd[index] - self.learning_rate * delta
+        if nesterov:
+            self.w[index] += self.momentum * self.pdw[index] - self.learning_rate * dw - self.weight_decay * self.w[index]
+            self.b[index] += self.momentum * self.pdd[index] - self.learning_rate * delta - self.weight_decay * self.b[index]
+        else:
+            self.w[index] += self.pdw[index] - self.weight_decay * self.w[index]
+            self.b[index] += self.pdd[index] - self.weight_decay * self.b[index]
 
-        self.w[index] += self.pdw[index] - self.weight_decay * self.w[index]
-        self.b[index] += self.pdd[index] - self.weight_decay * self.b[index]
 
     def train_on_batch(self, x, y):
         z, a, masks = self._feed_forward(x, True)
@@ -598,7 +603,7 @@ class SET_MLP:
                 # add new random connections
                 keepConnections=np.size(rowsWNew)
                 lengthRandom=valsW.shape[0]-keepConnections
-                limit = np.sqrt(6. / float(self.dimensions[i - 1] + self.dimensions[i]))
+                limit = np.sqrt(6. / float(self.dimensions[i - 1]))
                 randomVals = np.random.uniform(-limit, limit, lengthRandom)
                 zeroVals=0*randomVals # explicit zeros
 

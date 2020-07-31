@@ -1,41 +1,30 @@
 import matplotlib
 #matplotlib.use('Agg')
-import seaborn as sns
-from scipy import stats
-from sklearn.metrics import mean_squared_error, r2_score
 from scipy.sparse import csr_matrix, find
 from sklearn.metrics import confusion_matrix
-from sklearn.linear_model import LinearRegression
-import matplotlib.pyplot as plt
-import datetime
 from sklearn.metrics import classification_report
-import networkx as nx
-from networkx.algorithms import bipartite
-import numpy as np
-from scipy.stats import norm
 from models.set_mlp_sequential import *
 from utils.load_data import *
-from keras import backend as K
-from utils.load_data import *
-from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.preprocessing import PolynomialFeatures
 from keras.layers import Dense, Dropout, Activation, Flatten, ReLU
 from keras import optimizers
 import numpy as np
-import time
-from models.sgdw_keras import SGDW
-import datetime
+from mpl_toolkits.mplot3d import Axes3D # <--- This is important for 3d plotting
+
 from keras import backend as K
 #Please note that in newer versions of keras_contrib you may encounter some import errors. You can find a fix for it on the Internet, or as an alternative you can try other activations functions.
 from keras_contrib.layers.advanced_activations.srelu import SReLU
-from keras.datasets import cifar10
-from keras.utils import np_utils
-import argparse
-import keras
+
 # Force Keras to use CPU
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 X_train, Y_train, X_test, Y_test = load_cifar10_data_not_flattened(50000, 10000)
+from scipy.optimize import curve_fit
+def func(x, a, b, c):
+    return a * np.exp(-b * x) + c
 
 config = {
             'n_processes': 3,
@@ -117,7 +106,7 @@ model.add(Dropout(0.3))
 model.add(Dense(10, name="dense_4", weights=w4)) #please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
 model.add(Activation('softmax'))
 
-model.load_weights('cifar10_weights_fulltraining.h5')
+model.load_weights('../../SET-MLP-Keras-Weights-Mask/model_weights/cifar10_weights_fulltraining.h5')
 
 sgd = optimizers.SGD(momentum=0.9, learning_rate=0.01)
 model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
@@ -161,9 +150,9 @@ np.savetxt("Biases3.txt", b[3])
 b[4] = model.get_layer("dense_4").get_weights()[1]
 np.savetxt("Biases4.txt", b[4])
 srelu_weights = {}
-srelu_weights[1] = np.loadtxt("SReluWeights1_cifar10.txt")
-srelu_weights[2] = np.loadtxt("SReluWeights2_cifar10.txt")
-srelu_weights[3] = np.loadtxt("SReluWeights3_cifar10.txt")
+srelu_weights[1] = np.loadtxt("../../SET-MLP-Keras-Weights-Mask/srelu_weights/SReluWeights1_cifar10.txt")
+srelu_weights[2] = np.loadtxt("../../SET-MLP-Keras-Weights-Mask/srelu_weights/SReluWeights2_cifar10.txt")
+srelu_weights[3] = np.loadtxt("../../SET-MLP-Keras-Weights-Mask/srelu_weights/SReluWeights3_cifar10.txt")
 
 def srelu(tl, al, tr, ar, x):
     if x >= tr:
@@ -195,66 +184,157 @@ wSRelu2 = model.get_layer("srelu2").get_weights()
 wSRelu3 = model.get_layer("srelu3").get_weights()
 mean_activations = []
 mean_inputs = []
+
+# Iterate through the pre-activations
+# for idx, values in weights.items():
+#     # Draw the density plot
+#     sns.distplot(values, hist=False, kde=True,
+#                  kde_kws={'linewidth': 3},
+#                  label='Weights Layer ' + str(idx+1))
+#plt.show()
+
 for k, w in weights.items():
     if k==2:
         get_nth_layer_output = K.function([model.layers[0].input], [model.layers[4].output])
-        inputs = get_nth_layer_output([X_test])[0]
+        inputs = get_nth_layer_output([X_train])[0]
         mean_input = inputs.mean(axis=0)
+        std_input = inputs.std(axis=0)
+        p5_input = np.percentile(inputs, 5, axis=0)
+        p25_input = np.percentile(inputs, 25, axis=0)
+        p50_input = np.percentile(inputs, 50, axis=0)
+        p75_input = np.percentile(inputs, 75, axis=0)
+        p95_input = np.percentile(inputs, 95, axis=0)
 
         get_nth_layer_output = K.function([model.layers[0].input], [model.layers[5].output])
-        activations = get_nth_layer_output([X_test])[0]
+        activations = get_nth_layer_output([X_train])[0]
         mean_activation = activations.mean(axis=0)
     if k==1:
         get_nth_layer_output = K.function([model.layers[0].input], [model.layers[1].output])
-        inputs = get_nth_layer_output([X_test])[0]
+        inputs = get_nth_layer_output([X_train])[0]
         mean_input = inputs.mean(axis=0)
+        std_input = inputs.std(axis=0)
+        p5_input = np.percentile(inputs, 5, axis=0)
+        p25_input = np.percentile(inputs, 25, axis=0)
+        p50_input = np.percentile(inputs, 50, axis=0)
+        p75_input = np.percentile(inputs, 75, axis=0)
+        p95_input = np.percentile(inputs, 95, axis=0)
 
         get_nth_layer_output = K.function([model.layers[0].input], [model.layers[2].output])
-        activations = get_nth_layer_output([X_test])[0]
+        activations = get_nth_layer_output([X_train])[0]
         mean_activation = activations.mean(axis=0)
     if k==3:
         get_nth_layer_output = K.function([model.layers[0].input], [model.layers[7].output])
-        inputs = get_nth_layer_output([X_test])[0]
+        inputs = get_nth_layer_output([X_train])[0]
         mean_input = inputs.mean(axis=0)
+        std_input = inputs.std(axis=0)
+        p5_input = np.percentile(inputs, 5, axis=0)
+        p25_input = np.percentile(inputs, 25, axis=0)
+        p50_input = np.percentile(inputs, 50, axis=0)
+        p75_input = np.percentile(inputs, 75, axis=0)
+        p95_input = np.percentile(inputs, 95, axis=0)
 
         get_nth_layer_output = K.function([model.layers[0].input], [model.layers[8].output])
-        activations = get_nth_layer_output([X_test])[0]
+        activations = get_nth_layer_output([X_train])[0]
         mean_activation = activations.mean(axis=0)
     if k==4:
         get_nth_layer_output = K.function([model.layers[0].input], [model.layers[10].output])
-        inputs = get_nth_layer_output([X_test])[0]
+        inputs = get_nth_layer_output([X_train])[0]
         mean_input = inputs.mean(axis=0)
+        std_input = inputs.std(axis=0)
 
         get_nth_layer_output = K.function([model.layers[0].input], [model.layers[11].output])
-        activations = get_nth_layer_output([X_test])[0]
+        activations = get_nth_layer_output([X_train])[0]
         mean_activation = activations.mean(axis=0)
 
     # sns.distplot(mean_activation, hist=False, kde=True,
     #              kde_kws={'linewidth': 3},
     #              label='Layer ' + str(k))
     # plt.show()
+    # plt.scatter(range(0,4000), mean_input)
+    # plt.show()
+    #
+    # plt.scatter(range(0, 4000), mean_activation)
+    # plt.show()
+
+
+
     mean_activations.append(mean_activation)
     mean_inputs.append(mean_input)
 
-    # sns.distplot(mean_input, hist=False, kde=True,
-    #              kde_kws={'linewidth': 3},
-    #              label='Input Layer ' + str(k))
-    # sns.distplot(mean_activation, hist=False, kde=True,
-    #              kde_kws={'linewidth': 3},
-    #              label='Activation Layer ' + str(k))
-    # plt.show()
+    sns.distplot(mean_input, hist=False, kde=True,
+                 kde_kws={'linewidth': 3},
+                 label='Input Layer ' + str(k))
+    sns.distplot(mean_activation, hist=False, kde=True,
+                 kde_kws={'linewidth': 3},
+                 label='Activation Layer ' + str(k))
+    plt.show()
     if k<=3:
         tl = srelu_weights[k][0]
         al = srelu_weights[k][1]
         tr = srelu_weights[k][2]
         ar = srelu_weights[k][3]
+        #
+        # plt.plot(mean_input, al,'.', color='orange' )
+        # plt.show()
+        # plt.plot(std_input, ar, '.', color='orange')
+        # plt.show()
+        # plt.plot(mean_activation, ar, '.', color='orange')
+        # plt.show()
+
+        # z = np.polyfit(mean_input, al, 2)
+        # print(z)
+        # mymodel = np.poly1d(z)
+        # print(r2_score(al, mymodel(mean_input)))
+        #
+        # myline = np.linspace(-2.5, 0.2, 1000)
+        #
+        # plt.scatter(mean_input, al, s=5, alpha=0.3)
+        # plt.plot(myline, mymodel(myline))
+        # plt.show()
+
+
+
+
+        # poly = PolynomialFeatures(degree=2)
+        # X_poly = poly.fit_transform(mean_input)
+
+        # poly.fit(X_poly, al)
+        # lin = LinearRegression()
+        # lin.fit(X_poly, al)
+        #
+        # # Visualising the Linear Regression results
+        # plt.plot(mean_input, al, color='blue')
+        #
+        # plt.plot(mean_input, lin.predict(mean_input), color='red')
+        # plt.title('Linear Regression')
+        # plt.xlabel('Mean input')
+        # plt.ylabel('Left slope')
+        #
+        # plt.show()
+        #
+        # # Visualising the Polynomial Regression results
+        # plt.scatter(mean_input, al, color='blue')
+        #
+        # plt.plot(mean_input, lin.predict(poly.fit_transform(mean_input.reshape(1, -1))), color='red')
+        # plt.title('Polynomial Regression')
+        # plt.xlabel('Mean input')
+        # plt.ylabel('Left slope')
+        #
+        # plt.show()
 
     w_sparse = csr_matrix(w)
     i, j, v = find(w_sparse)
-    # plt.hist(np.round(v,2), bins=100)
+    # plt.figure(figsize=(3, 4))
+    # plt.hist(v, bins=500)
     # plt.title(f'Weight distribution layer {k}')
     # plt.xlabel("value")
     # plt.ylabel("Frequency")
+    #
+    # plt.show()
+
+    # sns.distplot(v, hist=False, kde=True,
+    #              kde_kws={'linewidth': 3})
+    # plt.title(f'Weight distribution layer {k}')
     # plt.show()
 
     # positive_std = np.std(weights[weights > 0])
@@ -284,6 +364,32 @@ for k, w in weights.items():
         sum_outgoing_weights = np.abs(weights[k+1]).sum(axis=1)  
         edges = sum_incoming_weights + sum_outgoing_weights
         connections = outgoing_edges + incoming_edges
+
+        plt.scatter(mean_input, al, s=5,alpha=0.5, cmap='OrRd', c=std_input)
+        plt.colorbar();  # show color scale
+        plt.show()
+        plt.scatter(mean_input, sum_incoming_weights,s=5,alpha=0.5, cmap='OrRd', c=std_input)
+        plt.colorbar();  # show color scale
+        plt.show()
+
+        popt, pcov = curve_fit(func, mean_input, al)
+        print(popt)
+
+        plt.plot(mean_input, func(mean_input, *popt), 'g--',
+                 label='fit: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt))
+        plt.xlabel('x')
+        plt.ylabel('y')
+        plt.legend()
+        plt.show()
+
+        # fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+        # # Plot the values
+        # ax.scatter(mean_input, al, std_input, c='b', marker='o')
+        # ax.set_xlabel('X-axis')
+        # ax.set_ylabel('Y-axis')
+        # ax.set_zlabel('Z-axis')
+        # plt.show()
     else:
         sum_incoming_weights = np.abs(weights[k]).sum(axis=0)
         edges = sum_incoming_weights
@@ -291,6 +397,11 @@ for k, w in weights.items():
 
     if k != 4:
         t_connections = np.percentile(connections, 25)
+        # plt.figure(figsize=(5, 6))
+        # plt.hist(edges, bins=500)
+        # plt.title(f'Degree distribution layer {k}')
+        # plt.xlabel("Degree")
+        # plt.ylabel("Abs sum of connections")
         t = np.percentile(edges, 50)
         t2 = np.percentile(edges, 100)
         idxs = (-edges).argsort()[:1000]
@@ -298,6 +409,30 @@ for k, w in weights.items():
             f"Removing {edges[(edges<t) | (edges>t2)].shape[0]} neurons and {incoming_edges[(edges<t) | (edges>t2)].sum()} weights , weighted sum threshold is {t}, connection threshold is {t_connections}")
         edges = np.where((edges<t) | (edges>t2), 0, edges)
         ids = np.argwhere(edges==0)
+
+        # plt.figure(figsize=(5, 6))
+        # plt.hist(connections, bins=500)
+        # plt.title(f'Degree distribution layer {k}')
+        # plt.xlabel("Degree")
+        # plt.ylabel("# of connections")
+        #
+        # plt.show()
+        #
+        # plt.figure(figsize=(5, 6))
+        # plt.hist(sum_incoming_weights, bins=500)
+        # plt.title(f'Input degree distribution layer {k}')
+        # plt.xlabel("Degree")
+        # plt.ylabel("Abs sum of input connections")
+
+        # plt.show()
+        #
+        # plt.figure(figsize=(5, 6))
+        # plt.hist(sum_outgoing_weights, bins=500)
+        # plt.title(f'Output degree distribution layer {k}')
+        # plt.xlabel("Degree")
+        # plt.ylabel("Abs sum of output connections")
+        #
+        # plt.show()
 
         # if k==1:
         #     ids = np.argwhere(al>0.2)

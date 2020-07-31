@@ -63,7 +63,7 @@ from time import time
 from mpi_training.mpi.manager import MPIManager
 from mpi_training.train.algo import Algo
 from mpi_training.train.data import Data
-from mpi_training.train.model import MPIModel
+from mpi_training.train.model import SETMPIModel
 from mpi_training.logger import initialize_logger
 
 if __name__ == '__main__':

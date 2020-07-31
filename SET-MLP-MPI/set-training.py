@@ -108,11 +108,11 @@ if __name__ == "__main__":
         print("Number of neurons per layer:", X_train.shape[1], n_hidden_neurons, n_hidden_neurons,
               n_hidden_neurons, Y_train.shape[1])
 
-        set_mlp = SET_MLP((3072, 4000, 1000, 4000, 10),
-                          (SparseReluSym, SparseReluSym, SparseReluSym, Softmax), **config)
+        set_mlp = SET_MLP((3072, 4000, 1000, 4000, 1000, 4000, 1000,4000,10),
+                          (SparseReluSym75,SparseReluSym75Positive,SparseReluSym75,SparseReluSym75Positive,SparseReluSym75,SparseReluSym75Positive,SparseReluSym75, Softmax), **config)
         start_time = time.time()
         set_mlp.fit_generator(X_train, Y_train, X_test, Y_test, testing=True,
-                    save_filename=r"Results2/sparse_relu_sym_augmented_set_mlp_sequential_cifar10_" +
+                    save_filename=r"Results2/7layers_alterned_augmented_set_mlp_sequential_cifar10_" +
                                   str(n_training_samples) + "_training_samples_e" + str(
                         epsilon) + "_rand" + str(i))
         step_time = time.time() - start_time

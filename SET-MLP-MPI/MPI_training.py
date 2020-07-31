@@ -7,7 +7,7 @@ from time import time
 from mpi_training.mpi.manager import MPIManager
 from mpi_training.train.algo import Algo
 from mpi_training.train.data import Data
-from mpi_training.train.model import MPIModel
+from mpi_training.train.model import SETMPIModel
 from mpi_training.logger import initialize_logger
 
 # Run this file with "mpiexec -n 4 python MPI_training.py"
@@ -54,7 +54,7 @@ if __name__ == '__main__':
     parser.add_argument('--mode', help='Mode of operation.'
                         'One of "sgd" (Stohastic Gradient Descent), "sgdm" (Stohastic Gradient Descent with Momentum),'
                         '"easgd" (Elastic Averaging SGD) or "gem" (Gradient Energy Matching)',
-                        default='easgd')
+                        default='sgdm')
     parser.add_argument('--elastic-force', help='beta parameter for EASGD', type=float, default=0.9)
     parser.add_argument('--elastic-lr', help='worker SGD learning rate for EASGD',
                         type=float, default=1.0, dest='elastic_lr')
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     parser.add_argument('--momentum', type=float, default=0.9, help='SGD momentum (default: 0.5)')
     parser.add_argument('--dropout-rate', type=float, default=0.3, help='Dropout rate')
     parser.add_argument('--weight-decay', type=float, default=0.0, help='Dropout rate')
-    parser.add_argument('--epsilon', type=int, default=30, help='Sparsity level')
+    parser.add_argument('--epsilon', type=int, default=20, help='Sparsity level')
     parser.add_argument('--zeta', type=float, default=0.3,
                         help='It gives the percentage of unimportant connections which are removed and replaced with '
                              'random ones after every epoch(in [0..1])')
@@ -86,7 +86,7 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=0, help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10,
                         help='how many batches to wait before logging training status')
-    parser.add_argument('--n-training-samples', type=int, default=60000, help='Number of training samples')
+    parser.add_argument('--n-training-samples', type=int, default=50000, help='Number of training samples')
     parser.add_argument('--n-testing-samples', type=int, default=10000, help='Number of testing samples')
 
     args = parser.parse_args()
@@ -112,7 +112,7 @@ if __name__ == '__main__':
     num_workers = num_processes - 1
 
     # Initialize logger
-    base_file_name = "Results2/easgd_set_mlp_mpi_cifar10_" + str(args.n_training_samples) + "_training_samples_e" + \
+    base_file_name = "Results2/sgdm_async_set_mlp_mpi_cifar10_" + str(args.n_training_samples) + "_training_samples_e" + \
                     str(args.epsilon) + "_rand" + str(1) + "_num_workers_" + str(num_workers)
     log_file = base_file_name + "_logs_execution.txt"
 
@@ -190,10 +190,10 @@ if __name__ == '__main__':
     # Instantiate SET model
     if rank == 0:
         from models.set_mlp_mpi_master import *
-        model = MPIModel(model=SET_MLP(dimensions, (Relu, Relu, Relu, Softmax), **model_config))
+        model = SETMPIModel(model=SET_MLP(dimensions, (Relu, Relu, Relu, Softmax), **model_config))
     else:
         from models.set_mlp_mpi import *
-        model = MPIModel(model=SET_MLP(dimensions, (Relu, Relu, Relu, Softmax), **model_config))
+        model = SETMPIModel(model=SET_MLP(dimensions, (Relu, Relu, Relu, Softmax), **model_config))
 
     # Creating the MPIManager object causes all needed worker and master nodes to be created
     manager = MPIManager(comm=comm, data=data, algo=algo, model=model,

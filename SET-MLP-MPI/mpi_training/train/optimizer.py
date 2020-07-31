@@ -66,7 +66,7 @@ class MomentumSGD(Optimizer):
             dw = v[0]
             delta = v[1]
 
-            #dw = retain_valid_updates(weights['w'][index], dw)
+            dw = retain_valid_updates(weights['w'][index], dw)
 
             # perform the update with momentum
             if index not in weights['pdw']:

@@ -124,7 +124,7 @@ class SET_MLP_CIFAR10:
         self.batch_size = 100 # batch size
         self.maxepoches = 1000 # number of epochs
         self.learning_rate = 0.01 # SGD learning rate
-        self.num_classes = 10 # number of classes
+        self.num_classes = 8 # number of classes
         self.momentum=0.9 # SGD momentum
 
         # generate an Erdos Renyi sparse weights mask for each layer
@@ -253,10 +253,10 @@ class SET_MLP_CIFAR10:
             self.weightsEvolution()
             K.clear_session()
             self.create_model()
-            np.savetxt("SReluWeights1.txt", self.wSRelu1)
-            np.savetxt("SReluWeights2.txt", self.wSRelu2)
-            np.savetxt("SReluWeights3.txt", self.wSRelu3)
-        self.model.save_weights('my_model_weights_fulltraining.h5')
+            np.savetxt("SReluWeights1_no_problematic_classes_cifar10.txt", self.wSRelu1)
+            np.savetxt("SReluWeights2_no_problematic_classes_cifar10.txt", self.wSRelu2)
+            np.savetxt("SReluWeights3_no_problematic_classes_cifar10.txt", self.wSRelu3)
+        self.model.save_weights('cifar10_no_problematic_classes_weights_fulltraining.h5')
 
         self.accuracies_per_epoch=np.asarray(self.accuracies_per_epoch)
 
@@ -308,10 +308,24 @@ class SET_MLP_CIFAR10:
 
         #read CIFAR10 data
         (x_train, y_train), (x_test, y_test) = cifar10.load_data()
+        y_train = y_train.reshape((50000,))
+        y_test = y_test.reshape((10000,))
+        ids_train = np.argwhere((y_train!=2) & (y_train!=3))
+
+        ids_test = np.argwhere((y_test!=2) & (y_test!=3))
+        x_train = x_train[ids_train.reshape((40000,))]
+        y_train = y_train[ids_train]
+        x_test = x_test[ids_test.reshape((8000,))]
+        y_test = y_test[ids_test]
+        y_train = np.where(y_train>3, y_train-2, y_train)
+        y_test = np.where(y_test > 3, y_test - 2, y_test)
+
         y_train = np_utils.to_categorical(y_train, self.num_classes)
         y_test = np_utils.to_categorical(y_test, self.num_classes)
         x_train = x_train.astype('float32')
         x_test = x_test.astype('float32')
+
+
 
         #normalize data
         xTrainMean = np.mean(x_train, axis=0)
@@ -338,7 +352,7 @@ if __name__ == '__main__':
 
     # save accuracies over for all training epochs
     # in "results" folder you can find the output of running this file
-    np.savetxt("../Results/set_mlp_relu_sgd_cifar10_one_cpu.txt", np.asarray(model.accuracies_per_epoch))
+    np.savetxt("../Results/no_problematic_classes_set_mlp_relu_sgd_cifar10_one_cpu.txt", np.asarray(model.accuracies_per_epoch))
 
 
 
