@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import skew
 
 
 class Relu:
@@ -88,24 +89,45 @@ class RReLu:
         return z
 
 
+class SparseAlternatedReLU:
+    def __init__(self, slope):
+        self.slope = slope
+
+    def activation(self, z):
+        z = np.where(z < 0, self.slope * z, z)
+        return z
+
+    def prime(self, z):
+        z = np.where(z < 0, self.slope, 1)
+        return z
+
+
 class RunningMeanReLU:
     def __init__(self):
         self.mean = 0
         self.n_batches = 0
 
     def activation(self, z):
-        if self.n_batches == 0:
-            self.mean = z.mean(axis=0)
-            self.n_batches += 1
-        else:
-            self.n_batches += 1
-            self.mean = (self.mean + z.mean(axis=0)) / 2
+        # if self.n_batches == 0:
+        #     s = skew(z, axis=0)
+        #     self.al = np.where(s < 0, -0.75, 0.75)
+        # if self.n_batches == 0:
+        #     self.mean = z.mean(axis=0)
+        #     self.n_batches += 1
+        # else:
+        #     self.n_batches += 1
+        #     self.mean = (self.mean + z.mean(axis=0)) / 2
 
-        np.where(z > self.mean, z,  - z*0.75)
+        # s = skew(z, axis=0)
+        p95 = np.percentile(z, 95, axis=0)
+        p5 = np.percentile(z, 5, axis=0)
+        self.al = np.where(np.abs(np.abs(p5) - np.abs(p95)) > 0  , -0.75, 0.75)
+
+        z = np.where(z > 0, z,  z * self.al)
         return z
 
     def prime(self, z):
-        np.where(z > self.mean, 1, - 0.75)
+        z = np.where(z > 0, 1, self.al)
         return z
 
 
