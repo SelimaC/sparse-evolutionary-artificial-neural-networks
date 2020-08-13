@@ -90,9 +90,14 @@ def dropout(x, rate):
     return x * scale * keep_mask, keep_mask
 
 
-def create_sparse_weights(epsilon, n_rows, n_cols):
+def create_sparse_weights(epsilon, n_rows, n_cols, weight_init):
     # He uniform initialization
-    limit = np.sqrt(6. / float(n_rows))
+    if weight_init == 'he_uniform':
+        limit = np.sqrt(6. / float(n_rows))
+
+    # Xavier initialization
+    if weight_init == 'xavier':
+        limit = np.sqrt(6. / (float(n_rows) + float(n_cols)))
 
     mask_weights = np.random.rand(n_rows, n_cols)
     prob = 1 - (epsilon * (n_rows + n_cols)) / (n_rows * n_cols)  # normal to have 8x connections
@@ -144,6 +149,7 @@ class SET_MLP:
         self.dropout_rate = config['dropout_rate']  # dropout rate
         self.dimensions = dimensions
         self.batch_size = config['batch_size']
+        self.weight_init = config['weight_init']
         self.training_time = 0
         self.testing_time = 0
         self.evolution_time = 0
@@ -156,7 +162,7 @@ class SET_MLP:
         self.activations = {}
 
         for i in range(len(dimensions) - 1):
-            self.w[i + 1] = create_sparse_weights(self.epsilon, dimensions[i], dimensions[i + 1])  #create sparse weight matrices
+            self.w[i + 1] = create_sparse_weights(self.epsilon, dimensions[i], dimensions[i + 1], weight_init=self.weight_init)  #create sparse weight matrices
             self.b[i + 1] = np.zeros(dimensions[i + 1], dtype='float32')
             self.activations[i + 2] = activations[i]
 
@@ -614,6 +620,7 @@ class SET_MLP:
             keep_connections = np.size(rows_w_new)
             length_random = vals_w.shape[0] - keep_connections
             limit = np.sqrt(6. / float(self.dimensions[i - 1]))
+            limit = np.sqrt(6. / (float(self.dimensions[i - 1]) + float(self.dimensions[i])))
             random_vals = np.random.uniform(-limit, limit, length_random)
             zero_vals = 0 * random_vals  # explicit zeros
 
