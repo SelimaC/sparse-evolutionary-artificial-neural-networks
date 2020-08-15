@@ -29,10 +29,13 @@ class MPISingleWorker(MPIWorker):
             if self.monitor:
                 self.monitor.start_monitor()
 
-            for i_batch, batch in enumerate(self.data.generate_data()):
+            for j in range(self.data.x_train.shape[0] // self.data.batch_size):
+                start_pos = j * self.data.batch_size
+                end_pos = (j + 1) * self.data.batch_size
+                batch = self.data.x_train[start_pos:end_pos], self.data.y_train[start_pos:end_pos]
                 self.update = self.model.train_on_batch(x=batch[0], y=batch[1])
 
-                self.weights = self.algo.apply_update(self.weights, self.update)
+                self.weights = self.algo.apply_update(self.weights, self.update, epoch)
                 self.algo.set_worker_model_weights(self.model, self.weights)
                 self.weights = self.model.get_weights()
 
@@ -41,8 +44,8 @@ class MPISingleWorker(MPIWorker):
 
             if testing:
                 t3 = datetime.datetime.now()
-                accuracy_test, activations_test = self.model.predict(self.data.x_test.reshape(-1, 32 * 32 * 3), self.data.y_test)
-                accuracy_train, activations_train = self.model.predict(self.data.x_train.reshape(-1, 32 * 32 * 3), self.data.y_train)
+                accuracy_test, activations_test = self.model.predict(self.data.x_test, self.data.y_test)
+                accuracy_train, activations_train = self.model.predict(self.data.x_train, self.data.y_train)
                 t4 = datetime.datetime.now()
                 maximum_accuracy = max(maximum_accuracy, accuracy_test)
                 loss_test = self.model.compute_loss(self.data.y_test, activations_test)
