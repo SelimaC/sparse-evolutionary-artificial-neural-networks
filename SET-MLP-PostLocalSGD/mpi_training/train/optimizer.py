@@ -6,6 +6,7 @@ import logging
 import scipy.sparse as sparse
 from scipy.sparse import coo_matrix
 
+
 class Optimizer(object):
     """Base class for optimization algorithms.
         Currently doesn't do anything."""
@@ -77,13 +78,13 @@ class MomentumSGD(Optimizer):
                 # self.momentum *= (self.learning_rate / old_lr)
                 # self.momentum = min(0.99, self.momentum)
 
-            if self.epoch >= 100:  # First decay
+            if self.epoch >= 200:  # First decay
                 old_lr = self.learning_rate
                 self.learning_rate *= self.lr_decay
                 # self.momentum *= (self.learning_rate / old_lr)
                 # self.momentum = min(0.99, self.momentum)
 
-            if self.epoch >= 150:  # Second decay
+            if self.epoch >= 275:  # Second decay
                 self.learning_rate *= self.lr_decay
                 old_lr = self.learning_rate
                 # self.momentum *= (self.learning_rate / old_lr)
@@ -301,7 +302,7 @@ class OptimizerBuilder(object):
             self.config['lr'] = 0.1
 
     def build(self):
-        from keras.optimizers import deserialize
+        # from keras.optimizers import deserialize
         opt_config = {'class_name': self.name, 'config': self.config}
-        opt = deserialize(opt_config)
-        return opt
+        # opt = deserialize(opt_config)
+        return opt_config

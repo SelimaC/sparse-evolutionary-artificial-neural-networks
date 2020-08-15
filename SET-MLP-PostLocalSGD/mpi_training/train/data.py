@@ -2,7 +2,6 @@
 
 import numpy as np
 import logging
-from keras.preprocessing.image import ImageDataGenerator
 
 
 class Data(object):
@@ -25,6 +24,7 @@ class Data(object):
         self.dataset = dataset
 
         if self.augmentation:
+            from keras.preprocessing.image import ImageDataGenerator
             self.datagen = ImageDataGenerator(
                 featurewise_center=False,  # set input mean to 0 over the dataset
                 samplewise_center=False,  # set each sample mean to 0
@@ -92,7 +92,7 @@ class Data(object):
             start_pos = j * self.batch_size
             end_pos = (j + 1) * self.batch_size
 
-            yield self.x_train[start_pos:end_pos], self.x_train[start_pos:end_pos]
+            yield self.x_train[start_pos:end_pos], self.y_train[start_pos:end_pos]
 
     def count_data(self):
         return self.x_train.shape[0]

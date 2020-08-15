@@ -1,17 +1,11 @@
 ### Utilities for mpi_learn module
 import os
 import numpy as np
-from sklearn.model_selection import train_test_split
-import joblib
-import matplotlib.pyplot as plt
-import pickle
-import seaborn as sns
 import h5py
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from keras.datasets import cifar10, mnist
 from keras.utils import np_utils
 from PIL import Image
-import cv2
 
 # Augmented dataset path
 cur_dir = os.path.dirname(os.path.abspath(__file__))

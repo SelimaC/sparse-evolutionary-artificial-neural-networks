@@ -393,8 +393,11 @@ class MPIWorker(MPIProcess):
 
         self.model.set_weights(self.weights)
 
+        self.logger.info(f"Worker {self.rank} start training")
+
         for x_b, y_b in self.data.generate_data():
             num_batches += 1
+            self.logger.info(f"Starting batch {num_batches}, now validate every is {self.algo.sync_every}")
             if self.monitor:
                 self.monitor.start_monitor()
 
@@ -405,17 +408,20 @@ class MPIWorker(MPIProcess):
                     self.model.set_weights(self.weights)
 
             tmp = self.model.train_on_batch(x=x_b, y=y_b)
-            for index, v in tmp.items():
-                dw = v[0]
-                delta = v[1]
+            if self.algo.sync_every > 1:
+                for index, v in tmp.items():
+                    dw = v[0]
+                    delta = v[1]
 
-                if index not in self.update:
-                    self.update[index] = (dw, delta)
-                else:
-                    self.update[index] = (self.update[index][0] + dw, self.update[index][1] + delta)
-
+                    if index not in self.update:
+                        self.update[index] = (dw, delta)
+                    else:
+                        self.update[index] = (self.update[index][0] + dw, self.update[index][1] + delta)
+            else:
+                self.update = tmp
             if self.algo.should_sync():
                 self.sync_with_parent()
+            self.logger.info(f"Finishing batch {num_batches}, now validate every is {self.algo.sync_every}")
 
             if num_batches % batches_per_epoch == 0:
                 self.logger.info("Finishing epoch {:d}".format(self.epoch + epoch))
@@ -424,11 +430,16 @@ class MPIWorker(MPIProcess):
                     break
 
                 epoch += 1
-                if epoch >= 100:
-                    self.algo.sync_every = 2
-                if epoch >= 150:
+                if epoch >= 350:
                     self.algo.sync_every = 4
+                elif epoch >= 200:
+                    self.algo.sync_every = 2
+                elif epoch == 1:
+                    self.algo.sync_every = self.rank
+                else:
+                    self.algo.sync_every = (self.algo.sync_every % 4) + 1
 
+                self.logger.info(f"Finishing epoch {epoch}, now validate every is {self.algo.sync_every}")
                 if self.monitor:
                     self.monitor.stop_monitor()
 
@@ -540,6 +551,7 @@ class MPIMaster(MPIProcess):
         accepted = self.accept_update()
         self.send_bool(accepted, dest=source, comm=self.child_comm)
         if accepted:
+
             t1 = datetime.datetime.now()
             self.recv_update(source=source, comm=self.child_comm,
                              add_to_existing=self.is_synchronous())
@@ -574,7 +586,9 @@ class MPIMaster(MPIProcess):
                             self.weights = self.model.get_weights()
                             self.logger.info(f"Master epoch {self.epoch + 1}")
                 else:
+                    self.logger.info("suujvchsdj")
                     self.apply_update(sync=self.is_synchronous())
+                    self.logger.info("cccc")
                     if self.is_synchronous():
                         self.update = {}
 

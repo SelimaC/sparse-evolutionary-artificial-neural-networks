@@ -1,7 +1,7 @@
 import argparse
 import logging
-
-from utils.load_data import *
+import pandas as pd
+from utils.nn_functions import *
 from mpi4py import MPI
 from time import time
 from mpi_training.mpi.manager import MPIManager
@@ -10,8 +10,8 @@ from mpi_training.train.data import Data
 from mpi_training.train.model import SETMPIModel
 from mpi_training.logger import initialize_logger
 
-# Run this file with "mpiexec -n 4 python MPI_training.py"
-# Add --synchronous if you want to train in syncronous mode
+# Run this file with "mpiexec -n 6 python MPI_training.py --synchronous"
+# Add --synchronous if you want to train in synchronous mode
 # Add --monitor to enable cpu and memory monitoring
 
 # Uncomment next lines for debugging with size > 1 (note that port mapping ids change at very run)
@@ -20,7 +20,36 @@ from mpi_training.logger import initialize_logger
 # import pydevd_pycharm
 # port_mapping = [56131, 56135] # Add ids of processes you want to debug in this list
 # pydevd_pycharm.settrace('localhost', port=port_mapping[rank], stdoutToServer=True, stderrToServer=True)
+# This is a classification problem to distinguish between a signal process which produces Higgs bosons and a background process which does not.
+def load_higgs_data(n_training_samples=10500, n_testing_samples=5000):
+    N = 1050000.  # Change this line adjust the number of rows.
+    data = pd.read_csv("../data/HIGGS/HIGGS.csv", nrows=N, header=None)
+    test_data = pd.read_csv("../data/HIGGS/HIGGS.csv", nrows=500000, header=None, skiprows=1050000)
 
+    y_train = np.array(data.loc[:, 0])
+    x_train = np.array(data.loc[:, 1:])
+    x_test = np.array(test_data.loc[:, 1:])
+    y_test = np.array(test_data.loc[:, 0])
+
+    x_train = x_train.astype('float32')
+    x_test = x_test.astype('float32')
+
+    index_train = np.arange(x_train.shape[0])
+    np.random.shuffle(index_train)
+
+    index_test = np.arange(x_test.shape[0])
+    np.random.shuffle(index_test)
+
+    x_train = x_train[index_train[0:n_training_samples], :]
+    y_train = y_train[index_train[0:n_training_samples]]
+
+    x_test = x_test[index_test[0:n_testing_samples], :]
+    y_test = y_test[index_test[0:n_testing_samples]]
+
+    y_train = pd.get_dummies(y_train).to_numpy()
+    y_test = pd.get_dummies(y_test).to_numpy()
+
+    return x_train, y_train, x_test, y_test
 
 def shared_partitions(n, num_workers, batch_size):
     """"
@@ -72,8 +101,8 @@ if __name__ == '__main__':
 
     # Model configuration
     parser.add_argument('--batch-size', type=int, default=128, help='input batch size for training (default: 64)')
-    parser.add_argument('--epochs', type=int, default=200,  help='number of epochs to train (default: 10)')
-    parser.add_argument('--lr', type=float, default=0.05, help='learning rate (default: 0.01)')
+    parser.add_argument('--epochs', type=int, default=500,  help='number of epochs to train (default: 10)')
+    parser.add_argument('--lr', type=float, default=0.01, help='learning rate (default: 0.01)')
     parser.add_argument('--lr-rate-decay', type=float, default=0.0, help='learning rate decay (default: 0)')
     parser.add_argument('--momentum', type=float, default=0.9, help='SGD momentum (default: 0.5)')
     parser.add_argument('--dropout-rate', type=float, default=0.3, help='Dropout rate')
@@ -88,9 +117,10 @@ if __name__ == '__main__':
                         help='how many batches to wait before logging training status')
     parser.add_argument('--n-training-samples', type=int, default=50000, help='Number of training samples')
     parser.add_argument('--n-testing-samples', type=int, default=10000, help='Number of testing samples')
-    parser.add_argument('--augmentation', default=True, help='Data augmentation', action='store_true')
-    parser.add_argument('--dataset', default='cifar10', help='Specify dataset. One of "cifar19", "fashionmnist"),'
-                        '"higgs" or "mnist"')
+    parser.add_argument('--augmentation', default=False, help='Data augmentation', action='store_true')
+    parser.add_argument('--dataset', default='higgs', help='Specify dataset. One of "cifar19", "fashionmnist"),'
+                                                             '"higgs", "svhn", "madelon", "leukemia", "cllsub111",'
+                                                             '"gli85", "smkcan187", "eurostat", "orlraws10p" or "mnist"')
 
     args = parser.parse_args()
 
@@ -101,7 +131,8 @@ if __name__ == '__main__':
         'seed': args.seed,
         'zeta': args.zeta,
         'epsilon': args.epsilon,
-        'loss': args.loss
+        'loss': args.loss,
+        'weight_init': 'xavier'
     }
 
     # Comment this if you would like to use the full power of randomization. I use it to have repeatable results.
@@ -115,8 +146,8 @@ if __name__ == '__main__':
     num_workers = num_processes - 1
 
     # Initialize logger
-    base_file_name = "Results/sgdm_sync_batch128_aug_set_mlp_mpi_cifar10_" + str(args.n_training_samples) + "_training_samples_e" + \
-                    str(args.epsilon) + "_rand" + str(1) + "_num_workers_" + str(num_workers)
+    base_file_name = "Experiments/relu_sgdm_sync_batch128_aug_set_mlp_mpi_higgs_" + str(args.epochs) + "_epochs_e" + \
+                    str(args.epsilon) + "_rand" + str(0) + "_num_workers_" + str(num_workers)
     log_file = base_file_name + "_logs_execution.txt"
 
     save_filename = base_file_name + "_process_" + str(rank)
@@ -128,7 +159,7 @@ if __name__ == '__main__':
         X_train, Y_train, X_test, Y_test = load_cifar10_data_not_flattened(args.n_training_samples,
                                                                            args.n_testing_samples)
     else:
-        X_train, Y_train, X_test, Y_test = load_cifar10_data(args.n_training_samples, args.n_testing_samples)
+        X_train, Y_train, X_test, Y_test = load_higgs_data()
 
     if num_processes == 1:
         validate_every = int(X_train.shape[0] // (args.batch_size * args.sync_every))
@@ -153,7 +184,12 @@ if __name__ == '__main__':
                         x_train=X_train, y_train=Y_train,
                         x_test=X_test, y_test=Y_test, augmentation=args.augmentation,
                         dataset=args.dataset)
+            logging.info(f"Validate every {validate_every} time steps")
     del X_train, Y_train, X_test, Y_test
+
+    # Scale up the learning rate for synchronous training
+    if args.synchronous:
+        args.lr = args.lr * num_workers
 
     # Some input arguments may be ignored depending on chosen algorithm
     if args.mode == 'easgd':
@@ -184,12 +220,7 @@ if __name__ == '__main__':
         dimensions = (3072, 4000, 1000, 4000, 10)
 
     # Instantiate SET model
-    if rank == 0:
-        from models.set_mlp_mpi_master import *
-        model = SETMPIModel(model=SET_MLP(dimensions, (Relu, Relu, Relu, Softmax), **model_config))
-    else:
-        from models.set_mlp_mpi import *
-        model = SETMPIModel(model=SET_MLP(dimensions, (Relu, Relu, Relu, Softmax), **model_config))
+    model = SETMPIModel(dimensions, (Relu, Relu, Relu, Softmax), **model_config)
 
     # Creating the MPIManager object causes all needed worker and master nodes to be created
     manager = MPIManager(comm=comm, data=data, algo=algo, model=model,

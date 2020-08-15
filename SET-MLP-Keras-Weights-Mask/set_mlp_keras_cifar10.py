@@ -295,7 +295,7 @@ if __name__ == '__main__':
 
     # save accuracies over for all training epochs
     # in "results" folder you can find the output of running this file
-    np.savetxt("results/set_mlp_relu_sgd_cifar10_acc.txt", np.asarray(model.accuracies_per_epoch))
+    np.savetxt("results/set_mlp_new_pruning_relu_sgd_cifar10_acc.txt", np.asarray(model.accuracies_per_epoch))
 
 
 

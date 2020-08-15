@@ -41,7 +41,6 @@ from scipy.sparse import csr_matrix
 from models.nn_functions import *
 from numba import njit, jit, prange
 # the "sparseoperations" Cython library was tested in Ubuntu 16.04. Please note that you may encounter some "solvable" issues if you compile it in Windows.
-import sparsebackpropagation
 import datetime
 import os
 import numpy as np

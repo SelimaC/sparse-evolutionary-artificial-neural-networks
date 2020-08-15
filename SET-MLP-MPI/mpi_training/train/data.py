@@ -3,7 +3,6 @@
 import numpy as np
 import logging
 from keras.preprocessing.image import ImageDataGenerator
-from utils.filters import *
 
 class Data(object):
     """Class providing an interface to the input training and testing data.

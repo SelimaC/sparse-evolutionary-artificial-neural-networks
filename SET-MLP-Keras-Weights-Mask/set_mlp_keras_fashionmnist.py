@@ -42,7 +42,7 @@ from __future__ import division
 from __future__ import print_function
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
+from keras.layers import Dense, Dropout, Activation, Flatten, ReLU
 from keras import optimizers
 import numpy as np
 from keras import backend as K
@@ -100,7 +100,7 @@ class SET_MLP_FASHION_MNIST:
         self.epsilon = 20 # control the sparsity level as discussed in the paper
         self.zeta = 0.3 # the fraction of the weights removed
         self.batch_size = 100 # batch size
-        self.maxepoches = 1000 # number of epochs
+        self.maxepoches = 200 # number of epochs
         self.learning_rate = 0.01 # SGD learning rate
         self.num_classes = 10 # number of classes
         self.momentum=0.9 # SGD momentum
@@ -134,13 +134,13 @@ class SET_MLP_FASHION_MNIST:
         self.model = Sequential()
         self.model.add(Flatten(input_shape=(28, 28)))
         self.model.add(Dense(1000, name="sparse_1",kernel_constraint=MaskWeights(self.wm1),weights=self.w1))
-        self.model.add(SReLU(name="srelu1",weights=self.wSRelu1))
+        self.model.add(ReLU(name="srelu1",weights=self.wSRelu1))
         self.model.add(Dropout(0.3))
         self.model.add(Dense(1000, name="sparse_2",kernel_constraint=MaskWeights(self.wm2),weights=self.w2))
-        self.model.add(SReLU(name="srelu2",weights=self.wSRelu2))
+        self.model.add(ReLU(name="srelu2",weights=self.wSRelu2))
         self.model.add(Dropout(0.3))
         self.model.add(Dense(1000, name="sparse_3",kernel_constraint=MaskWeights(self.wm3),weights=self.w3))
-        self.model.add(SReLU(name="srelu3",weights=self.wSRelu3))
+        self.model.add(ReLU(name="srelu3",weights=self.wSRelu3))
         self.model.add(Dropout(0.3))
         self.model.add(Dense(self.num_classes, name="dense_4", weights=self.w4)) #please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
         self.model.add(Activation('softmax'))
@@ -179,7 +179,7 @@ class SET_MLP_FASHION_MNIST:
         sum_outgoing_weights = np.abs(outgoing_weights).sum(axis=1)
         edges = sum_incoming_weights + sum_outgoing_weights
 
-        t = np.percentile(edges, 20)
+        t = np.percentile(edges, 10)
         edges = np.where(edges <= t, 0, edges)
         ids = np.argwhere(edges == 0)
 
@@ -194,12 +194,38 @@ class SET_MLP_FASHION_MNIST:
         while (nrAdd < noRewires):
             i = np.random.randint(0, rewiredWeights.shape[0])
             j = np.random.randint(0, rewiredWeights.shape[1])
-            if (rewiredWeights[i, j] == 0):
+            if (rewiredWeights[i, j] == 0) and j not in ids:
                 rewiredWeights[i, j] = 1
                 nrAdd += 1
 
         return [rewiredWeights, weightMaskCore]
 
+    def prune(self,weights, outgoing_weights, noWeights):
+        # rewire weight matrix
+        sum_incoming_weights = np.abs(weights).sum(axis=0)
+        sum_outgoing_weights = np.abs(outgoing_weights).sum(axis=1)
+        edges = sum_incoming_weights + sum_outgoing_weights
+
+        t = np.percentile(edges, 10)
+        edges = np.where(edges <= t, 0, edges)
+        ids = np.argwhere(edges == 0)
+
+        rewiredWeights = weights.copy();
+        rewiredWeights[:, ids] = 0;
+        rewiredWeights[rewiredWeights != 0] = 1;
+        weightMaskCore = rewiredWeights.copy()
+
+        # add zeta random weights
+        # nrAdd = 0
+        # noRewires = noWeights - np.sum(rewiredWeights)
+        # while (nrAdd < noRewires):
+        #     i = np.random.randint(0, rewiredWeights.shape[0])
+        #     j = np.random.randint(0, rewiredWeights.shape[1])
+        #     if (rewiredWeights[i, j] == 0) and j not in ids:
+        #         rewiredWeights[i, j] = 1
+        #         nrAdd += 1
+
+        return [rewiredWeights, weightMaskCore]
     def weightsEvolution(self, epoch):
         # this represents the core of the SET procedure. It removes the weights closest to zero in each layer and add new random weights
         self.w1 = self.model.get_layer("sparse_1").get_weights()
@@ -212,10 +238,14 @@ class SET_MLP_FASHION_MNIST:
         self.wSRelu3 = self.model.get_layer("srelu3").get_weights()
 
 
-        if False:#epoch > 250 and epoch % 100 == 0:
+        if epoch >= 100:
             [self.wm1, self.wm1Core] = self.rewireMask(self.w1[0], self.w2[0], self.noPar1)
             [self.wm2, self.wm2Core] = self.rewireMask(self.w2[0], self.w3[0], self.noPar2)
             [self.wm3, self.wm3Core] = self.rewireMask(self.w3[0], self.w4[0], self.noPar3)
+        elif epoch >= 150 and epoch % 5 == 0:
+            [self.wm1, self.wm1Core] = self.prune(self.w1[0], self.w2[0], self.noPar1)
+            [self.wm2, self.wm2Core] = self.prune(self.w2[0], self.w3[0], self.noPar2)
+            [self.wm3, self.wm3Core] = self.prune(self.w3[0], self.w4[0], self.noPar3)
         else:
             [self.wm1, self.wm1Core] = self.rewireMask_basic(self.w1[0], self.noPar1)
             [self.wm2, self.wm2Core] = self.rewireMask_basic(self.w2[0], self.noPar2)
@@ -235,7 +265,10 @@ class SET_MLP_FASHION_MNIST:
         # training process in a for loop
         self.accuracies_per_epoch=[]
         for epoch in range(0, self.maxepoches):
-            sgd = optimizers.SGD(momentum=0.9, learning_rate=0.01)
+            if epoch>150:
+                sgd = optimizers.SGD(momentum=0.9, learning_rate=0.01)
+            else:
+                sgd = optimizers.SGD(momentum=0.9, learning_rate=0.005)
             self.model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
             # Shuffle the data
             seed = np.arange(x_train.shape[0])
@@ -261,10 +294,10 @@ class SET_MLP_FASHION_MNIST:
             self.weightsEvolution(epoch)
             K.clear_session()
             self.create_model()
-            np.savetxt("SReluWeights1_fashionmnist.txt", self.wSRelu1)
-            np.savetxt("SReluWeights2_fashionmnist.txt", self.wSRelu2)
-            np.savetxt("SReluWeights3_fashionmnist.txt", self.wSRelu3)
-        self.model.save_weights('fashionmnist_weights_fulltraining.h5')
+            # np.savetxt("SReluWeights1_fashionmnist.txt", self.wSRelu1)
+            # np.savetxt("SReluWeights2_fashionmnist.txt", self.wSRelu2)
+            # np.savetxt("SReluWeights3_fashionmnist.txt", self.wSRelu3)
+        self.model.save_weights('fashionmnist_weights_fulltraining_new.h5')
 
         self.accuracies_per_epoch=np.asarray(self.accuracies_per_epoch)
 
@@ -285,6 +318,7 @@ class SET_MLP_FASHION_MNIST:
 
         return [x_train, x_test, y_train, y_test]
 
+
 if __name__ == '__main__':
 
     # create and run a SET-MLP model on CIFAR10
@@ -292,7 +326,7 @@ if __name__ == '__main__':
 
     # save accuracies over for all training epochs
     # in "results" folder you can find the output of running this file
-    np.savetxt("results/set_new_version_mlp_srelu_sgd_fashionmnist_acc.txt", np.asarray(model.accuracies_per_epoch))
+    np.savetxt("results/set_mlp_relu_new_evolution_edges_sgd_fashionmnist_acc.txt", np.asarray(model.accuracies_per_epoch))
 
 
 

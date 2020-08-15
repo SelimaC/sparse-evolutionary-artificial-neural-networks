@@ -619,9 +619,13 @@ class SET_MLP:
             # add new random connections
             keep_connections = np.size(rows_w_new)
             length_random = vals_w.shape[0] - keep_connections
-            limit = np.sqrt(6. / float(self.dimensions[i - 1]))
-            limit = np.sqrt(6. / (float(self.dimensions[i - 1]) + float(self.dimensions[i])))
+
+            if self.weight_init == 'he_uniform':
+                limit = np.sqrt(6. / float(self.dimensions[i - 1]))
+            if self.weight_init == 'xavier':
+                limit = np.sqrt(6. / (float(self.dimensions[i - 1]) + float(self.dimensions[i])))
             random_vals = np.random.uniform(-limit, limit, length_random)
+
             zero_vals = 0 * random_vals  # explicit zeros
 
             # adding  (wdok[ik,jk]!=0): condition

@@ -391,7 +391,7 @@ def load_madelon_data():
 
 
 # This is a classification problem to distinguish between a signal process which produces Higgs bosons and a background process which does not.
-def load_higgs_data(n_training_samples=1050000, n_testing_samples=500000):
+def load_higgs_data(n_training_samples=10500, n_testing_samples=5000):
     N = 1050000.  # Change this line adjust the number of rows.
     data = pd.read_csv("../data/HIGGS/HIGGS.csv", nrows=N, header=None)
     test_data = pd.read_csv("../data/HIGGS/HIGGS.csv", nrows=500000, header=None, skiprows=1050000)
