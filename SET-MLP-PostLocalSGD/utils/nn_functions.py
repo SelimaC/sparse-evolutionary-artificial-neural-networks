@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import skew
 
 
 class Relu:
@@ -120,13 +121,15 @@ class RunningMeanReLU:
         # s = skew(z, axis=0)
         p95 = np.percentile(z, 95, axis=0)
         p5 = np.percentile(z, 5, axis=0)
-        self.al = np.where(np.abs(np.abs(p5) - np.abs(p95)) > 0  , -0.75, 0.75)
+        diff = np.abs(np.abs(p5) - np.abs(p95))
+        self.al = np.where(diff > 0, -0.75, 0.75)
+        self.tl = - diff
 
-        z = np.where(z > 0, z,  z * self.al)
+        z = np.where(z > self.tl, z,  z * self.al)
         return z
 
     def prime(self, z):
-        z = np.where(z > 0, 1, self.al)
+        z = np.where(z > self.tl, 1, self.al)
         return z
 
 
@@ -185,6 +188,35 @@ class CrossEntropy:
         y /= y.sum(axis=-1, keepdims=True)
         output = np.clip(y, 1e-7, 1 - 1e-7)
         return np.sum(y_true * - np.log(output), axis=-1).sum() / y.shape[0]
+
+
+class RunningMeanReLU2:
+    def __init__(self):
+        self.mean = 0
+        self.n_batches = 0
+        self.n_batches_per_epoch = 50000/128
+
+    def activation(self, z):
+        if self.n_batches == 0:
+            self.mean = z.mean(axis=0)
+        else:
+            self.mean = (self.mean + z.mean(axis=0)) / 2
+
+        if self.n_batches / self.n_batches_per_epoch >= 100:
+            p95 = np.percentile(z, 95, axis=0)
+            p5 = np.percentile(z, 5, axis=0)
+            self.al = np.where(np.abs(p5) - np.abs(p95) > 0, -0.75, 0.75)
+            z = np.where(z > self.mean + 1e7, z, z * self.al)
+
+        self.n_batches += 1
+        return z
+
+    def prime(self, z):
+        if self.n_batches / self.n_batches_per_epoch >= 100:
+            z = np.where(z > self.mean + 1e7, 1, self.al)
+        else:
+            z = np.where(z > 0, 1, 0)
+        return z
 
 
 class MSE:
