@@ -166,9 +166,9 @@ def load_leukemia_data(n_training_samples=1397, n_testing_samples=699):
                          labels[label_16_train_ids.reshape(-1, )],
                          labels[label_17_train_ids.reshape(-1, )]))
 
-    mn, mx = x_train.min(), x_train.max()
-    x_train = (x_train - mn) / (mx - mn)
-    x_test = (x_test - mn) / (mx - mn)
+    # mn, mx = x_train.min(), x_train.max()
+    # x_train = (x_train - mn) / (mx - mn)
+    # x_test = (x_test - mn) / (mx - mn)
     #
     # xTrainMean = np.mean(x_train, axis=0)
     # xTtrainStd = np.std(x_train, axis=0)
@@ -391,7 +391,7 @@ def load_madelon_data():
 
 
 # This is a classification problem to distinguish between a signal process which produces Higgs bosons and a background process which does not.
-def load_higgs_data(n_training_samples=10500, n_testing_samples=5000):
+def load_higgs_data(n_training_samples=1050000, n_testing_samples=500000):
     N = 1050000.  # Change this line adjust the number of rows.
     data = pd.read_csv("../data/HIGGS/HIGGS.csv", nrows=N, header=None)
     test_data = pd.read_csv("../data/HIGGS/HIGGS.csv", nrows=500000, header=None, skiprows=1050000)
@@ -503,7 +503,7 @@ def load_mnist_data(n_training_samples, n_testing_samples):
 # Each example is a 28x28 grayscale image, associated with a label from 10 classes.
 def load_fashion_mnist_data(n_training_samples, n_testing_samples):
 
-    data = np.load("../data/fashion_mnist.npz")
+    data = np.load("../data/FASHIONMNIST/fashion_mnist.npz")
 
     index_train = np.arange(data["X_train"].shape[0])
     np.random.shuffle(index_train)

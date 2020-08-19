@@ -101,13 +101,31 @@ class SparseAlternatedReLU:
         z = np.where(z < 0, self.slope, 1)
         return z
 
+class SparseAlternatedReLU2:
+    def __init__(self, n):
+        self.al = []
+        for i in range(n):
+            if i%2==0:
+                self.al.append(0.75)
+            else:
+                self.al.append(-0.75)
+
+    def activation(self, z):
+        z = np.where(z < 0, self.al * z, z)
+        return z
+
+    def prime(self, z):
+        z = np.where(z < 0, self.al, 1)
+        return z
+
+
 
 class RunningMeanReLU:
     def __init__(self):
         self.mean = 0
         self.n_batches = 0
 
-    def activation(self, z):
+    def activation(self, z, test = False):
         # if self.n_batches == 0:
         #     s = skew(z, axis=0)
         #     self.al = np.where(s < 0, -0.75, 0.75)
@@ -119,11 +137,12 @@ class RunningMeanReLU:
         #     self.mean = (self.mean + z.mean(axis=0)) / 2
 
         # s = skew(z, axis=0)
-        p95 = np.percentile(z, 95, axis=0)
-        p5 = np.percentile(z, 5, axis=0)
-        diff = np.abs(np.abs(p5) - np.abs(p95))
-        self.al = np.where(diff > 0, -0.75, 0.75)
-        self.tl = - diff
+        if not test:
+            p95 = np.percentile(z, 95, axis=0)
+            p5 = np.percentile(z, 5, axis=0)
+            diff = np.abs(np.abs(p5) - np.abs(p95))
+            self.al = np.where(diff > 0, -0.5, 0.5)
+            self.tl = - diff
 
         z = np.where(z > self.tl, z,  z * self.al)
         return z
@@ -156,7 +175,7 @@ class Sigmoid:
 
 class Softmax:
     @staticmethod
-    def activation(z):
+    def activation(z, test=False):
         """
         https://stackoverflow.com/questions/34968722/softmax-function-python
         Numerically stable version
@@ -189,6 +208,29 @@ class CrossEntropy:
         output = np.clip(y, 1e-7, 1 - 1e-7)
         return np.sum(y_true * - np.log(output), axis=-1).sum() / y.shape[0]
 
+
+class CrossEntropyWeighted:
+    """
+    Used with Softmax activation in final layer
+    """
+    def __init__(self, class_weights):
+        self.class_weights = class_weights
+
+    def delta(self, y_true, y_pred):
+        """
+        Back propagation error delta
+        :return: (array)
+        """
+        return y_pred - y_true
+
+    def loss(self, y_true, y):
+        """
+        https://datascience.stackexchange.com/questions/9302/the-cross-entropy-error-function-in-neural-networks
+        :param y_true: (array) One hot encoded truth vector.
+        :param y: (array) Prediction vector
+        :return: (flt)
+        """
+        return -np.mean(y_true * np.log(y + 1e-8) )
 
 class RunningMeanReLU2:
     def __init__(self):

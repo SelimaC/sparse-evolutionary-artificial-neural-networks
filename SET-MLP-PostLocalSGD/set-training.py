@@ -10,13 +10,13 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 # Training settings
 parser = argparse.ArgumentParser(description='SET Parallel Training ')
-parser.add_argument('--batch-size', type=int, default=128, metavar='N',
+parser.add_argument('--batch-size', type=int, default=5, metavar='N',
                     help='input batch size for training (default: 64)')
 parser.add_argument('--test-batch-size', type=int, default=3000, metavar='N',
                     help='input batch size for testing (default: 1000)')
-parser.add_argument('--epochs', type=int, default=5, metavar='N',
+parser.add_argument('--epochs', type=int, default=500, metavar='N',
                     help='number of epochs to train (default: 10)')
-parser.add_argument('--lr', type=float, default=0.01, metavar='LR',
+parser.add_argument('--lr', type=float, default=0.005, metavar='LR',
                     help='learning rate (default: 0.01)')
 parser.add_argument('--lr-rate-decay', type=float, default=0.0, metavar='LRD',
                     help='learning rate decay (default: 0)')
@@ -24,9 +24,9 @@ parser.add_argument('--momentum', type=float, default=0.9, metavar='M',
                     help='SGD momentum (default: 0.9)')
 parser.add_argument('--dropout-rate', type=float, default=0.3, metavar='D',
                     help='Dropout rate')
-parser.add_argument('--weight-decay', type=float, default=0.000, metavar='W',
+parser.add_argument('--weight-decay', type=float, default=0.0002, metavar='W',
                     help='Dropout rate')
-parser.add_argument('--epsilon', type=int, default=20, metavar='E',
+parser.add_argument('--epsilon', type=int, default=10, metavar='E',
                     help='Sparsity level')
 parser.add_argument('--zeta', type=float, default=0.3, metavar='Z',
                     help='It gives the percentage of unimportant connections which are removed and replaced with '
@@ -42,7 +42,7 @@ parser.add_argument('--n-training-samples', type=int, default=50000, metavar='N'
 parser.add_argument('--n-testing-samples', type=int, default=10000, metavar='N',
                     help='Number of testing samples')
 parser.add_argument('--n-validation-samples', type=int, default=10000, help='Number of validation samples')
-parser.add_argument('--dataset', default='higgs', help='Specify dataset. One of "cifar10", "fashionmnist"),'
+parser.add_argument('--dataset', default='leukemia', help='Specify dataset. One of "cifar10", "fashionmnist"),'
                                                          '"higgs", "svhn", "madalon", "leukemia", "cllsub111",'
                                                          '"gli85", "smkcan187", "eurostat", "orlraws10p", "eurosat" or "mnist"')
 
@@ -80,6 +80,7 @@ if __name__ == "__main__":
             X_train, Y_train, X_test, Y_test = load_higgs_data()
         elif args.dataset == 'fashionmnist' or args.dataset == 'mnist':
             # Model architecture mnist
+            weight_init = 'he_uniform'
             dimensions = (784, 1000, 1000, 1000, 10)
             loss = 'cross_entropy'
             activations = (Relu, Relu, Relu, Softmax)
@@ -127,10 +128,12 @@ if __name__ == "__main__":
             batch_size = 5
             learning_rate = 0.005
             # Model architecture leukemia
-            dimensions = (54675, 10000, 18)
-            loss = 'cross_entropy'
+            dimensions = (54675, 27500, 27500, 18)
+            loss = 'cross_entropy_weighted'
+            dropout_rate = 0.3
+            weight_init = 'normal'
             epsilon = 10
-            activations = (Relu, Softmax)
+            activations = ( RunningMeanReLU(), RunningMeanReLU(), Softmax)
             X_train, Y_train, X_test, Y_test = load_leukemia_data()
             class_weights = class_weight.compute_class_weight('balanced', np.unique(Y_train), Y_train)
             Y_train = np_utils.to_categorical(Y_train, 18)
@@ -182,7 +185,7 @@ if __name__ == "__main__":
         set_mlp = SET_MLP(dimensions, activations, class_weights=class_weights, **config)
         start_time = time.time()
         set_mlp.fit(X_train, Y_train, X_test, Y_test, testing=True,
-                    save_filename=r"Experiments/relu_set_mlp_sequential_" + args.dataset + "_" +
+                    save_filename=r"Experiments/alternate_relu_set_mlp_sequential_" + args.dataset + "_" +
                                   str(n_training_samples) + "_training_samples_e" + str(
                         epsilon) + "_rand" + str(i) + "_epochs" + str(n_epochs) + "_batchsize" + str(batch_size)
                     )
