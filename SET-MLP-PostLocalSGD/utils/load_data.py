@@ -24,8 +24,8 @@ class Error(Exception):
 
 # The Leukemia dataset is obtained from the NCBI GEO repository with the accession number GSE13159
 def load_leukemia_data(n_training_samples=1397, n_testing_samples=699):
-    labels = np.loadtxt("../data/Leukemia/labels.txt")
-    data = np.loadtxt("../data/Leukemia/values.txt")
+    labels = np.loadtxt("../../data/Leukemia/labels.txt")
+    data = np.loadtxt("../../data/Leukemia/values.txt")
 
     index_data = np.arange(data.shape[0])
     np.random.shuffle(index_data)
@@ -171,9 +171,8 @@ def load_leukemia_data(n_training_samples=1397, n_testing_samples=699):
     # x_test = (x_test - mn) / (mx - mn)
     #
     # xTrainMean = np.mean(x_train, axis=0)
-    # xTtrainStd = np.std(x_train, axis=0)
+    # xTtrainStd = np.std(x_train, axis=0) + 1e18
     # x_train = (x_train - xTrainMean) / xTtrainStd
-    # x_test = (x_test - xTrainMean) / xTtrainStd
     # x_test = (x_test - xTrainMean) / xTtrainStd
 
     # x_train, x_test, y_train, y_test = train_test_split(data, labels, test_size=0.33, random_state=42)
@@ -243,7 +242,6 @@ def load_orlraws_10P_data(n_training_samples=70, n_testing_samples=30):
     xTtrainStd = np.std(x_train, axis=0)
     x_train = (x_train - xTrainMean) / xTtrainStd
     x_test = (x_test - xTrainMean) / xTtrainStd
-    x_test = (x_test - xTrainMean) / xTtrainStd
 
     x_train = x_train.astype('float32')
     x_test = x_test.astype('float32')
@@ -280,7 +278,6 @@ def load_smk_can_187_data(n_training_samples=124, n_testing_samples=63):
     xTrainMean = np.mean(x_train, axis=0)
     xTtrainStd = np.std(x_train, axis=0)
     x_train = (x_train - xTrainMean) / xTtrainStd
-    x_test = (x_test - xTrainMean) / xTtrainStd
     x_test = (x_test - xTrainMean) / xTtrainStd
 
     x_train = x_train.astype('float32')
@@ -319,7 +316,6 @@ def load_gli_85_data(n_training_samples=56, n_testing_samples=29):
     xTtrainStd = np.std(x_train, axis=0)
     x_train = (x_train - xTrainMean) / xTtrainStd
     x_test = (x_test - xTrainMean) / xTtrainStd
-    x_test = (x_test - xTrainMean) / xTtrainStd
 
     x_train = x_train.astype('float32')
     x_test = x_test.astype('float32')
@@ -357,7 +353,6 @@ def load_cll_sub_111_data(n_training_samples=74, n_testing_samples=37):
     xTtrainStd = np.std(x_train, axis=0)
     x_train = (x_train - xTrainMean) / xTtrainStd
     x_test = (x_test - xTrainMean) / xTtrainStd
-    x_test = (x_test - xTrainMean) / xTtrainStd
 
     x_train = x_train.astype('float32')
     x_test = x_test.astype('float32')
@@ -386,6 +381,8 @@ def load_madelon_data():
     x_train = x_train.astype('float32')
     x_test = x_test.astype('float32')
     x_val = x_val.astype('float32')
+    y_train = np_utils.to_categorical(y_train, 2)
+    y_val = np_utils.to_categorical(y_val, 2)
 
     return x_train, y_train, x_val, y_val
 
@@ -418,6 +415,13 @@ def load_higgs_data(n_training_samples=1050000, n_testing_samples=500000):
 
     y_train = np_utils.to_categorical(y_train, 2)
     y_test = np_utils.to_categorical(y_test, 2)
+
+
+    # Normalize data
+    x_train_mean = np.mean(x_train, axis=0)
+    x_train_std = np.std(x_train, axis=0)
+    x_train = (x_train - x_train_mean) / x_train_std
+    x_test = (x_test - x_train_mean) / x_train_std
 
     return x_train, y_train, x_test, y_test
 
@@ -517,8 +521,14 @@ def load_fashion_mnist_data(n_training_samples, n_testing_samples):
     y_test = data["Y_test"][index_test[0:n_testing_samples], :]
 
     # Normalize in 0..1
-    x_train = x_train.astype('float32') / 255.
-    x_test = x_test.astype('float32') / 255.
+    x_train = x_train.astype('float32')
+    x_test = x_test.astype('float32')
+
+    # Normalize data
+    x_train_mean = np.mean(x_train, axis=0)
+    x_train_std = np.std(x_train, axis=0)
+    x_train = (x_train - x_train_mean) / x_train_std
+    x_test = (x_test - x_train_mean) / x_train_std
 
     return x_train, y_train, x_test, y_test
 
@@ -639,7 +649,7 @@ def load_eurosat_parallel():
     data = data[index_data, :]
     labels = labels[index_data, :]
 
-    x_train, x_test, y_train, y_test = train_test_split(data, labels, test_size=0.33, random_state=42)
+    x_train, x_test, y_train, y_test = train_test_split(data, labels, test_size=0.3, random_state=42)
 
     # Normalize data
     x_train_mean = np.mean(x_train, axis=0)
@@ -647,8 +657,10 @@ def load_eurosat_parallel():
     x_train = (x_train - x_train_mean) / x_train_std
     x_test = (x_test - x_train_mean) / x_train_std
 
-    x_train = x_train.reshape(-1, 64 * 64 * 3).astype('float64')
-    x_test = x_test.reshape(-1, 64 * 64 * 3).astype('float64')
+    # x_train = x_train.reshape(-1, 64 * 64 * 3).astype('float32')
+    # x_test = x_test.reshape(-1, 64 * 64 * 3).astype('float32')
+    x_train = x_train.astype('float32')
+    x_test = x_test.astype('float32')
 
     return x_train, y_train, x_test, y_test
 

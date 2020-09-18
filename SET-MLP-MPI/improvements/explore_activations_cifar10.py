@@ -43,8 +43,8 @@ X_train, Y_train, X_test, Y_test = load_cifar10_data(50000, 10000)
 connections = np.load("../Results2/relu_augmented_set_mlp_sequential_cifar10_50000_training_samples_e20_rand0_input_connections.npz")["inputLayerConnections"]
 weights = np.load("../Results2/relu_augmented_set_mlp_sequential_cifar10_50000_training_samples_e20_rand0_weights.npz",  allow_pickle=True)
 biases = np.load("../Results2/relu_augmented_set_mlp_sequential_cifar10_50000_training_samples_e20_rand0_biases.npz", allow_pickle=True)
-w10 = weights['arr_999'].item()
-b10 = biases['arr_999'].item()
+w10 = weights['arr_100'].item()
+b10 = biases['arr_100'].item()
 
 weight_masks = np.array([w10[1].toarray(), w10[2].toarray(), w10[3].toarray(), w10[4].toarray()])
 #print("Started creating graph at", datetime.datetime.today().strftime('%Y%m%d_%H%M%S'))
@@ -74,10 +74,11 @@ config = {
             'n_hidden_neurons': 1000,
             'n_training_samples': 60000,
             'n_testing_samples': 10000,
-            'loss': 'cross_entropy'
+            'loss': 'cross_entropy',
+            'weight_init': 'he_uniform'
         }
 set_mlp = SET_MLP((X_train.shape[1], 4000, 1000, 4000,
-                           Y_train.shape[1]), (Relu, Relu, Relu, Softmax), **config)
+                           Y_train.shape[1]), (Relu, Relu, Relu, Softmax), class_weights=None, **config)
 
 set_mlp.w = w10
 set_mlp.b = b10

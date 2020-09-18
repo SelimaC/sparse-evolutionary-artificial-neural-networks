@@ -5,6 +5,7 @@ from sklearn.metrics import confusion_matrix
 from sklearn.metrics import classification_report
 from models.set_mlp_sequential import *
 from utils.load_data import *
+import seaborn as sns
 from keras.models import Sequential
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
@@ -13,7 +14,7 @@ from keras.layers import Dense, Dropout, Activation, Flatten, ReLU
 from keras import optimizers
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D # <--- This is important for 3d plotting
-
+import matplotlib.pyplot as plt
 from keras import backend as K
 #Please note that in newer versions of keras_contrib you may encounter some import errors. You can find a fix for it on the Internet, or as an alternative you can try other activations functions.
 from keras_contrib.layers.advanced_activations.srelu import SReLU
@@ -25,7 +26,8 @@ X_train, Y_train, X_test, Y_test = load_cifar10_data_not_flattened(50000, 10000)
 from scipy.optimize import curve_fit
 def func(x, a, b, c):
     return a * np.exp(-b * x) + c
-
+font = { 'size'   : 11}
+matplotlib.rc('font', **font)
 config = {
             'n_processes': 3,
             'n_epochs': 10,
@@ -260,14 +262,14 @@ for k, w in weights.items():
 
     mean_activations.append(mean_activation)
     mean_inputs.append(mean_input)
-
-    sns.distplot(mean_input, hist=False, kde=True,
-                 kde_kws={'linewidth': 3},
-                 label='Input Layer ' + str(k))
-    sns.distplot(mean_activation, hist=False, kde=True,
-                 kde_kws={'linewidth': 3},
-                 label='Activation Layer ' + str(k))
-    plt.show()
+    #
+    # sns.distplot(mean_input, hist=False, kde=True,
+    #              kde_kws={'linewidth': 3},
+    #              label='Input Layer ' + str(k))
+    # sns.distplot(mean_activation, hist=False, kde=True,
+    #              kde_kws={'linewidth': 3},
+    #              label='Activation Layer ' + str(k))
+    # plt.show()
     if k<=3:
         tl = srelu_weights[k][0]
         al = srelu_weights[k][1]
@@ -365,22 +367,22 @@ for k, w in weights.items():
         edges = sum_incoming_weights + sum_outgoing_weights
         connections = outgoing_edges + incoming_edges
 
-        plt.scatter(mean_input, al, s=5,alpha=0.5, cmap='OrRd', c=std_input)
-        plt.colorbar();  # show color scale
-        plt.show()
-        plt.scatter(mean_input, sum_incoming_weights,s=5,alpha=0.5, cmap='OrRd', c=std_input)
-        plt.colorbar();  # show color scale
-        plt.show()
+        # plt.scatter(mean_input, al, s=5,alpha=0.5, cmap='OrRd', c=std_input)
+        # plt.colorbar();  # show color scale
+        # plt.show()
+        # plt.scatter(mean_input, sum_incoming_weights,s=5,alpha=0.5, cmap='OrRd', c=std_input)
+        # plt.colorbar();  # show color scale
+        # plt.show()
 
-        popt, pcov = curve_fit(func, mean_input, al)
-        print(popt)
-
-        plt.plot(mean_input, func(mean_input, *popt), 'g--',
-                 label='fit: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt))
-        plt.xlabel('x')
-        plt.ylabel('y')
-        plt.legend()
-        plt.show()
+        # popt, pcov = curve_fit(func, mean_input, al)
+        # print(popt)
+        #
+        # plt.plot(mean_input, func(mean_input, *popt), 'g--',
+        #          label='fit: a=%5.3f, b=%5.3f, c=%5.3f' % tuple(popt))
+        # plt.xlabel('x')
+        # plt.ylabel('y')
+        # plt.legend()
+        # plt.show()
 
         # fig = plt.figure()
         # ax = fig.add_subplot(111, projection='3d')

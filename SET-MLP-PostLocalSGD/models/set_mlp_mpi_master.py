@@ -88,9 +88,23 @@ def dropout(x, rate):
     return x * scale * keep_mask, keep_mask
 
 
-def create_sparse_weights(epsilon, n_rows, n_cols):
+def createSparseWeights_II(epsilon,noRows,noCols, weight_init='normal'):
+    # generate an Erdos Renyi sparse weights mask
+    weights=lil_matrix((noRows, noCols))
+    for i in range(epsilon * (noRows + noCols)):
+        weights[np.random.randint(0,noRows),np.random.randint(0,noCols)]=np.float64(np.random.randn()/10)
+    print ("Create sparse matrix with ",weights.getnnz()," connections and ",(weights.getnnz()/(noRows * noCols))*100,"% density level")
+    weights=weights.tocsr()
+    return weights
+
+def create_sparse_weights(epsilon, n_rows, n_cols, weight_init):
     # He uniform initialization
-    limit = np.sqrt(6. / float(n_rows))
+    if weight_init == 'he_uniform':
+        limit = np.sqrt(6. / float(n_rows))
+
+    # Xavier initialization
+    if weight_init == 'xavier':
+        limit = np.sqrt(6. / (float(n_rows) + float(n_cols)))
 
     mask_weights = np.random.rand(n_rows, n_cols)
     prob = 1 - (epsilon * (n_rows + n_cols)) / (n_rows * n_cols)  # normal to have 8x connections
@@ -99,10 +113,11 @@ def create_sparse_weights(epsilon, n_rows, n_cols):
     weights = lil_matrix((n_rows, n_cols))
     n_params = np.count_nonzero(mask_weights[mask_weights >= prob])
     weights[mask_weights >= prob] = np.random.uniform(-limit, limit, n_params)
-    # print("Create sparse matrix with ", weights.getnnz(), " connections and ",
-    #       (weights.getnnz() / (n_rows * n_cols)) * 100, "% density level")
+    print("Create sparse matrix with ", weights.getnnz(), " connections and ",
+          (weights.getnnz() / (n_rows * n_cols)) * 100, "% density level")
     weights = weights.tocsr()
     return weights
+
 
 
 def array_intersect(a, b):
@@ -113,7 +128,7 @@ def array_intersect(a, b):
 
 
 class SET_MLP:
-    def __init__(self, dimensions, activations, **config):
+    def __init__(self, dimensions, activations, class_weights, **config):
         """
         :param dimensions: (tpl/ list) Dimensions of the neural net. (input, hidden layer, output)
         :param activations: (tpl/ list) Activations functions.
@@ -139,6 +154,7 @@ class SET_MLP:
         self.dropout_rate = config['dropout_rate']  # dropout rate
         self.dimensions = dimensions
         self.batch_size = config['batch_size']
+        self.weight_init = config['weight_init']
 
         self.save_filename = ""
         self.input_layer_connections = []
@@ -149,10 +165,14 @@ class SET_MLP:
         self.pdw = {}
         self.pdd = {}
         self.activations = {}
+        self.class_weights = class_weights
+
 
         for i in range(len(dimensions) - 1):
-            self.w[i + 1] = create_sparse_weights(self.epsilon, dimensions[i],
-                                                dimensions[i + 1])  # create sparse weight matrices
+            if self.weight_init == 'normal':
+                self.w[i + 1] = createSparseWeights_II(self.epsilon, dimensions[i], dimensions[i + 1])  # create sparse weight matrices
+            else:
+                self.w[i + 1] = create_sparse_weights(self.epsilon, dimensions[i], dimensions[i + 1], weight_init=self.weight_init)  #create sparse weight matrices
             self.b[i + 1] = np.zeros(dimensions[i + 1], dtype='float32')
             self.activations[i + 2] = activations[i]
 
@@ -166,6 +186,8 @@ class SET_MLP:
             self.loss = MSE(self.activations[self.n_layers])
         elif config['loss'] == 'cross_entropy':
             self.loss = CrossEntropy()
+        elif config['loss'] == 'cross_entropy_weighted':
+            self.loss = CrossEntropyWeighted(self.class_weights)
         else:
             raise NotImplementedError("The given loss function is  ot implemented")
 
@@ -333,13 +355,29 @@ class SET_MLP:
             self.pdw[i] = pdwdok.tocsr()
             self.w[i] = wdok.tocsr()
 
-    def weights_evolution_II(self):
+    def weights_evolution_II(self, epoch=0):
         # this represents the core of the SET procedure. It removes the weights closest to zero in each layer and add new random weights
         # improved running time using numpy routines - Amarsagar Reddy Ramapuram Matavalam (amar@iastate.edu)
         for i in range(1, self.n_layers - 1):
             # uncomment line below to stop evolution of dense weights more than 80% non-zeros
             # if self.w[i].count_nonzero() / (self.w[i].get_shape()[0]*self.w[i].get_shape()[1]) < 0.8:
                 t_ev_1 = datetime.datetime.now()
+
+                if epoch % 50 == 0 and epoch > 200:
+                    sum_incoming_weights = np.abs(self.w[i]).sum(axis=0)
+                    t = np.percentile(sum_incoming_weights, 20)
+                    sum_incoming_weights = np.where(sum_incoming_weights <= t, 0, sum_incoming_weights)
+                    ids = np.argwhere(sum_incoming_weights == 0)
+
+                    weights = self.w[i].tolil()
+                    pdw = self.pdw[i].tolil()
+                    weights[:, ids[:, 1]] = 0
+                    pdw[:, ids[:, 1]] = 0
+
+                    self.w[i] = weights.tocsr()
+                    self.pdw[i] = pdw.tocsr()
+
+                    continue
                 # converting to COO form - Added by Amar
                 wcoo = self.w[i].tocoo()
                 vals_w = wcoo.data
@@ -383,8 +421,16 @@ class SET_MLP:
                 # add new random connections
                 keep_connections = np.size(rows_w_new)
                 length_random = vals_w.shape[0] - keep_connections
-                limit = np.sqrt(6. / float(self.dimensions[i - 1]))
-                random_vals = np.random.uniform(-limit, limit, length_random)
+
+                if self.weight_init == 'normal':
+                    random_vals = np.random.randn(length_random) / 10  # to avoid multiple whiles, can we call 3*rand?
+                else:
+                    if self.weight_init == 'he_uniform':
+                        limit = np.sqrt(6. / float(self.dimensions[i - 1]))
+                    if self.weight_init == 'xavier':
+                        limit = np.sqrt(6. / (float(self.dimensions[i - 1]) + float(self.dimensions[i])))
+                    random_vals = np.random.uniform(-limit, limit, length_random)
+
                 zero_vals = 0*random_vals  # explicit zeros
 
                 # adding  (wdok[ik,jk]!=0): condition
@@ -486,7 +532,7 @@ class SET_MLP:
 
         return input_layer_connections
 
-    def predict(self, x_test, y_test, batch_size=100):
+    def predict(self, x_test, y_test, batch_size=128):
         """
         :param x_test: (array) Test input
         :param y_test: (array) Correct test output

@@ -232,7 +232,7 @@ class SET_MLP:
 
         for i in range(1, self.n_layers):
             z[i + 1] = a[i] @ self.w[i] + self.b[i]
-            a[i + 1] = self.activations[i + 1].activation(z[i + 1], test)
+            a[i + 1] = self.activations[i + 1].activation(z[i + 1])
             if drop and i < self.n_layers - 1:
                 # apply dropout
                 a[i + 1], masks[i + 1] = dropout(a[i + 1], self.dropout_rate)
@@ -503,7 +503,7 @@ class SET_MLP:
             t5 = datetime.datetime.now()
             if i < self.epochs - 1:  # do not change connectivity pattern after the last epoch
                 # self.weightsEvolution_I() # this implementation is more didactic, but slow.
-                self.weights_evolution_II()  # this implementation has the same behaviour as the one above, but it is much faster.
+                self.weights_evolution_II(i)  # this implementation has the same behaviour as the one above, but it is much faster.
             t6 = datetime.datetime.now()
             print("Weights evolution time ", t6 - t5)
             self.evolution_time += (t6 - t5).seconds
@@ -702,7 +702,7 @@ class SET_MLP:
             t_ev_2 = datetime.datetime.now()
             print("Weights evolution time for layer", i, "is", t_ev_2 - t_ev_1)
 
-    def predict(self, x_test, y_test, batch_size=100):
+    def predict(self, x_test, y_test, batch_size=1):
         """
         :param x_test: (array) Test input
         :param y_test: (array) Correct test output

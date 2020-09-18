@@ -39,22 +39,25 @@ from __future__ import division
 from __future__ import print_function
 from keras.preprocessing.image import ImageDataGenerator
 from keras.models import Sequential
-from keras.layers import Dense, Dropout, Activation, Flatten
+from keras.layers import Dense, Dropout, Activation, Flatten, ReLU, LeakyReLU
 from keras import optimizers
 import numpy as np
+import datetime
 from keras import backend as K
 #Please note that in newer versions of keras_contrib you may encounter some import errors. You can find a fix for it on the Internet, or as an alternative you can try other activations functions.
 from keras_contrib.layers.advanced_activations.srelu import SReLU
 from keras.datasets import cifar10
 from keras.utils import np_utils
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 
 class MLP_CIFAR10:
     def __init__(self):
         # set model parameters
         self.epsilon = 20 # control the sparsity level as discussed in the paper
-        self.batch_size = 100 # batch size
-        self.maxepoches = 1000 # number of epochs
+        self.batch_size = 128 # batch size
+        self.maxepoches = 500 # number of epochs
         self.learning_rate = 0.01 # SGD learning rate
         self.num_classes = 10 # number of classes
         self.momentum=0.9 # SGD momentum
@@ -69,6 +72,7 @@ class MLP_CIFAR10:
         self.wSRelu1 = None
         self.wSRelu2 = None
         self.wSRelu3 = None
+        self.training_time = 0
 
         # create a MLP-FixProb model
         self.create_model()
@@ -82,16 +86,16 @@ class MLP_CIFAR10:
         # create a dense MLP model for CIFAR10 with 3 hidden layers
         self.model = Sequential()
         self.model.add(Flatten(input_shape=(32, 32, 3)))
-        self.model.add(Dense(4000, name="dense_1", weights=self.w1))
-        self.model.add(SReLU(name="srelu1", weights=self.wSRelu1))
+        self.model.add(Dense(4000, name="dense_1"))
+        self.model.add(LeakyReLU(-0.25))
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(1000, name="dense_2", weights=self.w2))
-        self.model.add(SReLU(name="srelu2", weights=self.wSRelu2))
+        self.model.add(Dense(1000, name="dense_2"))
+        self.model.add(LeakyReLU(0.25))
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(4000, name="dense_3", weights=self.w3))
-        self.model.add(SReLU(name="srelu3", weights=self.wSRelu3))
+        self.model.add(Dense(4000, name="dense_3"))
+        self.model.add(LeakyReLU(-0.25))
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(self.num_classes, name="dense_4", weights=self.w4))
+        self.model.add(Dense(self.num_classes, name="dense_4"))
         self.model.add(Activation('softmax'))
 
     def train(self):
@@ -99,7 +103,7 @@ class MLP_CIFAR10:
         # read CIFAR10 data
         [x_train,x_test,y_train,y_test]=self.read_data()
 
-        #data augmentation
+        # data augmentation
         datagen = ImageDataGenerator(
             featurewise_center=False,  # set input mean to 0 over the dataset
             samplewise_center=False,  # set each sample mean to 0
@@ -115,17 +119,29 @@ class MLP_CIFAR10:
 
         self.model.summary()
 
+        # training process in a for loop
+        self.accuracies_per_epoch = []
         sgd = optimizers.SGD(lr=self.learning_rate, momentum=self.momentum)
         self.model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
+        for epoch in range(0, self.maxepoches):
+            output_generator = datagen.flow(x_train, y_train, batch_size=self.batch_size)
+            t1 = datetime.datetime.now()
+            for j in range(x_train.shape[0] // self.batch_size):
+                x_b, y_b = next(output_generator)
 
-        historytemp = self.model.fit_generator(datagen.flow(x_train, y_train,
-                                                            batch_size=self.batch_size),
-                                               steps_per_epoch=x_train.shape[0] // self.batch_size,
-                                               epochs=self.maxepoches,
-                                               validation_data=(x_test, y_test),
-                                               )
+                historytemp = self.model.train_on_batch(x_b, y_b)
 
-        self.accuracies_per_epoch = historytemp.history['val_acc']
+            # self.accuracies_per_epoch.append([historytemp.history['accuracy'][0], historytemp.history['loss'][0],
+            #                                   historytemp.history['val_accuracy'][0],
+            #                                   historytemp.history['val_loss'][0]])
+            t2 = datetime.datetime.now()
+            print("Training time: ", t2 - t1)
+            self.training_time += (t2 - t1).seconds
+
+            np.savetxt("results/dense_mlp_allrelu_sgd_cifar10_acc_rand4.txt", np.asarray(self.accuracies_per_epoch))
+
+        self.accuracies_per_epoch = np.asarray(self.accuracies_per_epoch)
+        print(f"Total training time is {self.training_time}")
 
 
     def read_data(self):
@@ -146,13 +162,13 @@ class MLP_CIFAR10:
         return [x_train, x_test, y_train, y_test]
 
 if __name__ == '__main__':
-
+    np.random.seed(4)
     # create and run a dense MLP model on CIFAR10
     model=MLP_CIFAR10()
 
     # save accuracies over for all training epochs
     # in "results" folder you can find the output of running this file
-    np.savetxt("results/dense_mlp_srelu_sgd_cifar10_acc.txt", np.asarray(model.accuracies_per_epoch))
+    np.savetxt("results/dense_mlp_allrelu_sgd_cifar10_acc_rand4.txt", np.asarray(model.accuracies_per_epoch))
 
 
 

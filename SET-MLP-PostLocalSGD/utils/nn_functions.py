@@ -175,7 +175,7 @@ class Sigmoid:
 
 class Softmax:
     @staticmethod
-    def activation(z, test=False):
+    def activation(z):
         """
         https://stackoverflow.com/questions/34968722/softmax-function-python
         Numerically stable version

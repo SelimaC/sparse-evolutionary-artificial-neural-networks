@@ -53,6 +53,32 @@ def dropout(x, rate):
     return x * scale * keep_mask, keep_mask
 
 
+def retain_valid_updates(weights, gradient):
+    cols = gradient.shape[1]
+    weights = weights.tocoo()
+    gradient = gradient.tocoo()
+    K_weights = np.array(weights.row * cols + weights.col)
+    K_gradient = np.array(gradient.row * cols + gradient.col)
+
+    indices = np.setdiff1d(K_gradient, K_weights, assume_unique=True)
+    if len(indices) != 0:
+        rows, cols = np.unravel_index(indices, gradient.shape)
+        gradient = gradient.tocsr()
+        gradient[rows, cols] = 0
+        gradient.eliminate_zeros()
+
+    return gradient
+
+
+def createSparseWeights_II(epsilon,noRows,noCols, weight_init='normal'):
+    # generate an Erdos Renyi sparse weights mask
+    weights=lil_matrix((noRows, noCols))
+    for i in range(epsilon * (noRows + noCols)):
+        weights[np.random.randint(0,noRows),np.random.randint(0,noCols)]=np.float64(np.random.randn()/10)
+    print ("Create sparse matrix with ",weights.getnnz()," connections and ",(weights.getnnz()/(noRows * noCols))*100,"% density level")
+    weights=weights.tocsr()
+    return weights
+
 def create_sparse_weights(epsilon, n_rows, n_cols, weight_init):
     # He uniform initialization
     if weight_init == 'he_uniform':
@@ -69,11 +95,10 @@ def create_sparse_weights(epsilon, n_rows, n_cols, weight_init):
     weights = lil_matrix((n_rows, n_cols))
     n_params = np.count_nonzero(mask_weights[mask_weights >= prob])
     weights[mask_weights >= prob] = np.random.uniform(-limit, limit, n_params)
-    # print("Create sparse matrix with ", weights.getnnz(), " connections and ",
-    #       (weights.getnnz() / (n_rows * n_cols)) * 100, "% density level")
+    print("Create sparse matrix with ", weights.getnnz(), " connections and ",
+          (weights.getnnz() / (n_rows * n_cols)) * 100, "% density level")
     weights = weights.tocsr()
     return weights
-
 
 def array_intersect(a, b):
     # this are for array intersection
@@ -86,7 +111,7 @@ class SETMPIModel(object):
     """Class that abstract all details of the model
     """
 
-    def __init__(self, dimensions, activations, **config):
+    def __init__(self, dimensions, activations, class_weights, **config):
         """
         :param dimensions: (tpl/ list) Dimensions of the neural net. (input, hidden layer, output)
         :param activations: (tpl/ list) Activations functions.
@@ -94,12 +119,19 @@ class SETMPIModel(object):
         """
         self.n_layers = len(dimensions)
 
+        self.n_layers = len(dimensions)
+        self.learning_rate = config['lr']
+        self.momentum = config['momentum']
+        self.epochs = config['n_epochs']
+        self.weight_decay = config['weight_decay']
         self.epsilon = config['epsilon']  # control the sparsity level as discussed in the paper
         self.zeta = config['zeta']  # the fraction of the weights removed
         self.dropout_rate = config['dropout_rate']  # dropout rate
         self.dimensions = dimensions
         self.batch_size = config['batch_size']
         self.weight_init = config['weight_init']
+        self.class_weights = class_weights
+        self.prune = config['prune']
 
         self.save_filename = ""
         self.input_layer_connections = []
@@ -111,9 +143,20 @@ class SETMPIModel(object):
         self.pdd = {}
         self.activations = {}
 
+        # Weights and biases are initiated by index. For a one hidden layer net you will have a w[1] and w[2]
+        self.w = {}
+        self.b = {}
+        self.pdw = {}
+        self.pdd = {}
+        self.activations = {}
+
         for i in range(len(dimensions) - 1):
-            self.w[i + 1] = create_sparse_weights(self.epsilon, dimensions[i],
-                                                  dimensions[i + 1], self.weight_init)  # create sparse weight matrices
+            if self.weight_init == 'normal':
+                self.w[i + 1] = createSparseWeights_II(self.epsilon, dimensions[i],
+                                                       dimensions[i + 1])  # create sparse weight matrices
+            else:
+                self.w[i + 1] = create_sparse_weights(self.epsilon, dimensions[i], dimensions[i + 1],
+                                                      weight_init=self.weight_init)  # create sparse weight matrices
             self.b[i + 1] = np.zeros(dimensions[i + 1], dtype='float32')
             self.activations[i + 2] = activations[i]
 
@@ -121,6 +164,8 @@ class SETMPIModel(object):
             self.loss = MSE(self.activations[self.n_layers])
         elif config['loss'] == 'cross_entropy':
             self.loss = CrossEntropy()
+        elif config['loss'] == 'cross_entropy_weighted':
+            self.loss = CrossEntropyWeighted(self.class_weights)
         else:
             raise NotImplementedError("The given loss function is  ot implemented")
 
@@ -230,6 +275,39 @@ class SETMPIModel(object):
 
         return update_params
 
+    def apply_update(self, gradient, epoch=0, sync=False, retain=False):
+        """Move weights in the direction of the gradient, by the amount of the
+            learning rate."""
+
+        for index, v in gradient.items():
+            dw = v[0]
+            delta = v[1]
+
+            if not sync and retain:
+               dw = retain_valid_updates(self.w[index], dw)
+
+            # perform the update with momentum
+            self._update_w_b(index, dw, delta)
+
+    def _update_w_b(self, index, dw, delta):
+        """
+        Update weights and biases.
+        :param index: (int) Number of the layer
+        :param dw: (array) Partial derivatives
+        :param delta: (array) Delta error.
+        """
+
+        # perform the update with momentum
+        if index not in self.pdw:
+            self.pdw[index] = - self.learning_rate * dw
+            self.pdd[index] = - self.learning_rate * delta
+        else:
+            self.pdw[index] = self.momentum * self.pdw[index] - self.learning_rate * dw
+            self.pdd[index] = self.momentum * self.pdd[index] - self.learning_rate * delta
+
+        self.w[index] += self.pdw[index] - self.weight_decay * self.w[index]
+        self.b[index] += self.pdd[index] - self.weight_decay * self.b[index]
+
     def train_on_batch(self, x, y):
         z, a, masks = self._feed_forward(x, True)
         return self._back_prop(z, a, masks, y)
@@ -238,11 +316,26 @@ class SETMPIModel(object):
         accuracy, activations = self.predict(x, y)
         return self.loss.loss(y, activations), accuracy
 
-    def weight_evolution(self):
+    def weight_evolution(self, epoch):
         # this represents the core of the SET procedure. It removes the weights closest to zero in each layer and add new random weights
         for i in range(1, self.n_layers - 1):
             # uncomment line below to stop evolution of dense weights more than 80% non-zeros
             # if self.w[i].count_nonzero() / (self.w[i].get_shape()[0]*self.w[i].get_shape()[1]) < 0.8:
+
+            if self.prune and (epoch % 10 == 0 and epoch > 200):
+                sum_incoming_weights = np.abs(self.w[i]).sum(axis=0)
+                t = np.percentile(sum_incoming_weights, 20)
+                sum_incoming_weights = np.where(sum_incoming_weights <= t, 0, sum_incoming_weights)
+                ids = np.argwhere(sum_incoming_weights == 0)
+
+                weights = self.w[i].tolil()
+                pdw = self.pdw[i].tolil()
+                weights[:, ids[:, 1]] = 0
+                pdw[:, ids[:, 1]] = 0
+
+                self.w[i] = weights.tocsr()
+                self.pdw[i] = pdw.tocsr()
+
             # converting to COO form - Added by Amar
             wcoo = self.w[i].tocoo()
             vals_w = wcoo.data

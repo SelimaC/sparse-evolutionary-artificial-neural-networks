@@ -138,13 +138,13 @@ class Algo(object):
 
     ### For Master ###
 
-    def apply_update(self, weights, update, epoch, sync=False):
+    def apply_update(self, weights, update, epoch, sync=False, retain=False):
         """Calls the optimizer to apply an update
             and returns the resulting weights"""
         if self.mode == 'easgd':
             return self.get_elastic_update_master(weights, update)
         else:
-            return self.optimizer.apply_update(weights, update, epoch, sync)
+            return self.optimizer.apply_update(weights, update, epoch, sync, retain)
 
     def get_elastic_update_master(self, cur_weights, other_weights):
         """EASGD weights update"""

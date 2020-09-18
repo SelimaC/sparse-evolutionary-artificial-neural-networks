@@ -48,6 +48,7 @@ from keras.layers import Dense, Dropout, Activation, Flatten, ReLU
 from keras import optimizers
 import numpy as np
 from keras import backend as K
+import datetime
 #Please note that in newer versions of keras_contrib you may encounter some import errors. You can find a fix for it on the Internet, or as an alternative you can try other activations functions.
 from keras_contrib.layers.advanced_activations.srelu import SReLU
 from keras.datasets import cifar10
@@ -101,7 +102,7 @@ class SET_MLP_CIFAR10:
         # set model parameters
         self.epsilon = 20 # control the sparsity level as discussed in the paper
         self.zeta = 0.3 # the fraction of the weights removed
-        self.batch_size = 100 # batch size
+        self.batch_size = 128 # batch size
         self.maxepoches = 1000 # number of epochs
         self.learning_rate = 0.01 # SGD learning rate
         self.num_classes = 10 # number of classes
@@ -117,7 +118,7 @@ class SET_MLP_CIFAR10:
         self.w2 = None
         self.w3 = None
         self.w4 = None
-
+        self.training_time = 0
         # initialize weights for SReLu activation function
 
         # create a SET-MLP model
@@ -132,13 +133,13 @@ class SET_MLP_CIFAR10:
         # create a SET-MLP model for CIFAR10 with 3 hidden layers
         self.model = Sequential()
         self.model.add(Flatten(input_shape=(32, 32, 3)))
-        self.model.add(Dense(4000, name="sparse_1",kernel_constraint=MaskWeights(self.wm1),weights=self.w1))
+        self.model.add(Dense(4000, name="sparse_1"))
         self.model.add(ReLU())
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(1000, name="sparse_2",kernel_constraint=MaskWeights(self.wm2),weights=self.w2))
+        self.model.add(Dense(1000, name="sparse_2"))
         self.model.add(ReLU())
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(4000, name="sparse_3",kernel_constraint=MaskWeights(self.wm3),weights=self.w3))
+        self.model.add(Dense(4000, name="sparse_3"))
         self.model.add(ReLU())
         self.model.add(Dropout(0.3))
         self.model.add(Dense(self.num_classes, name="dense_4", weights=self.w4)) #please note that there is no need for a sparse output layer as the number of classes is much smaller than the number of input hidden neurons
@@ -249,27 +250,33 @@ class SET_MLP_CIFAR10:
         self.model.summary()
 
         # training process in a for loop
+        sgd = optimizers.SGD(lr=self.learning_rate, momentum=self.momentum)
+        self.model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
         self.accuracies_per_epoch=[]
         for epoch in range(0,self.maxepoches):
+            t1 = datetime.datetime.now()
 
-            sgd = optimizers.SGD(lr=self.learning_rate, momentum=self.momentum)
-            self.model.compile(loss='categorical_crossentropy', optimizer=sgd, metrics=['accuracy'])
+
 
             historytemp = self.model.fit_generator(datagen.flow(x_train, y_train,
                                              batch_size=self.batch_size),
                                 steps_per_epoch=x_train.shape[0]//self.batch_size,
                                 epochs=epoch,
                                 validation_data=(x_test, y_test),
-                                 initial_epoch=epoch-1)
+                                 initial_epoch=epoch-1, use_multiprocessing=False, workers=1)
 
             self.accuracies_per_epoch.append(historytemp.history['val_accuracy'][0])
 
             #ugly hack to avoid tensorflow memory increase for multiple fit_generator calls. Theano shall work more nicely this but it is outdated in general
-            self.weightsEvolution()
-            K.clear_session()
-            self.create_model()
+            #self.weightsEvolution()
+            #K.clear_session()
+            #self.create_model()
+            t2 = datetime.datetime.now()
+            print("Training time: ", t2 - t1)
+            self.training_time += (t2 - t1).seconds
 
         self.accuracies_per_epoch=np.asarray(self.accuracies_per_epoch)
+        print(f"Total training time is {self.training_time}")
 
     def read_data(self):
 

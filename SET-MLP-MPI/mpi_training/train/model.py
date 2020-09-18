@@ -1,8 +1,9 @@
+
 from models.set_mlp_mpi import *
 import logging
 
 
-class MPIModel(object):
+class SETMPIModel(object):
     """Class that abstract all details of the model
     """
 
@@ -46,7 +47,7 @@ class MPIModel(object):
         return np.asarray(self.model.test_on_batch(**args))
 
     def predict(self, x, y):
-        return self.model.predict(x, y, self.model.batch_size)
+        return self.model.predict(x, y, 128)
 
     def weight_evolution(self):
-        return self.model.weightsEvolution_II()
+        return self.model.weights_evolution_II()

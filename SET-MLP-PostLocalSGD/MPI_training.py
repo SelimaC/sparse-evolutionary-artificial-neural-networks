@@ -4,11 +4,13 @@ import pandas as pd
 from utils.nn_functions import *
 from mpi4py import MPI
 from time import time
+from utils.load_data import *
 from mpi_training.mpi.manager import MPIManager
 from mpi_training.train.algo import Algo
 from mpi_training.train.data import Data
 from mpi_training.train.model import SETMPIModel
 from mpi_training.logger import initialize_logger
+from sklearn.utils import class_weight
 
 # Run this file with "mpiexec -n 6 python MPI_training.py --synchronous"
 # Add --synchronous if you want to train in synchronous mode
@@ -20,36 +22,7 @@ from mpi_training.logger import initialize_logger
 # import pydevd_pycharm
 # port_mapping = [56131, 56135] # Add ids of processes you want to debug in this list
 # pydevd_pycharm.settrace('localhost', port=port_mapping[rank], stdoutToServer=True, stderrToServer=True)
-# This is a classification problem to distinguish between a signal process which produces Higgs bosons and a background process which does not.
-def load_higgs_data(n_training_samples=10500, n_testing_samples=5000):
-    N = 1050000.  # Change this line adjust the number of rows.
-    data = pd.read_csv("../data/HIGGS/HIGGS.csv", nrows=N, header=None)
-    test_data = pd.read_csv("../data/HIGGS/HIGGS.csv", nrows=500000, header=None, skiprows=1050000)
 
-    y_train = np.array(data.loc[:, 0])
-    x_train = np.array(data.loc[:, 1:])
-    x_test = np.array(test_data.loc[:, 1:])
-    y_test = np.array(test_data.loc[:, 0])
-
-    x_train = x_train.astype('float32')
-    x_test = x_test.astype('float32')
-
-    index_train = np.arange(x_train.shape[0])
-    np.random.shuffle(index_train)
-
-    index_test = np.arange(x_test.shape[0])
-    np.random.shuffle(index_test)
-
-    x_train = x_train[index_train[0:n_training_samples], :]
-    y_train = y_train[index_train[0:n_training_samples]]
-
-    x_test = x_test[index_test[0:n_testing_samples], :]
-    y_test = y_test[index_test[0:n_testing_samples]]
-
-    y_train = pd.get_dummies(y_train).to_numpy()
-    y_test = pd.get_dummies(y_test).to_numpy()
-
-    return x_train, y_train, x_test, y_test
 
 def shared_partitions(n, num_workers, batch_size):
     """"
@@ -106,37 +79,157 @@ if __name__ == '__main__':
     parser.add_argument('--lr-rate-decay', type=float, default=0.0, help='learning rate decay (default: 0)')
     parser.add_argument('--momentum', type=float, default=0.9, help='SGD momentum (default: 0.5)')
     parser.add_argument('--dropout-rate', type=float, default=0.3, help='Dropout rate')
-    parser.add_argument('--weight-decay', type=float, default=0.00, help='Weight decay (l2 regularization)')
+    parser.add_argument('--weight-decay', type=float, default=0.0, help='Weight decay (l2 regularization)')
     parser.add_argument('--epsilon', type=int, default=20, help='Sparsity level')
     parser.add_argument('--zeta', type=float, default=0.3,
                         help='It gives the percentage of unimportant connections which are removed and replaced with '
                              'random ones after every epoch(in [0..1])')
     parser.add_argument('--n-neurons', type=int, default=3000, help='Number of neurons in the hidden layer')
-    parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
+    parser.add_argument('--seed', type=int, default=4, help='random seed (default: 1)')
     parser.add_argument('--log-interval', type=int, default=10,
                         help='how many batches to wait before logging training status')
     parser.add_argument('--n-training-samples', type=int, default=50000, help='Number of training samples')
     parser.add_argument('--n-testing-samples', type=int, default=10000, help='Number of testing samples')
-    parser.add_argument('--augmentation', default=False, help='Data augmentation', action='store_true')
-    parser.add_argument('--dataset', default='higgs', help='Specify dataset. One of "cifar19", "fashionmnist"),'
+    parser.add_argument('--augmentation', default=True, help='Data augmentation', action='store_true')
+    parser.add_argument('--dataset', default='cifar10', help='Specify dataset. One of "cifar10", "fashionmnist"),'
                                                              '"higgs", "svhn", "madelon", "leukemia", "cllsub111",'
                                                              '"gli85", "smkcan187", "eurostat", "orlraws10p" or "mnist"')
 
     args = parser.parse_args()
 
+    weight_init = 'xavier'
+    prune = False
+    n_hidden_neurons = args.n_neurons
+    epsilon = args.epsilon
+    zeta = args.zeta
+    n_epochs = args.epochs
+    batch_size = args.batch_size
+    dropout_rate = args.dropout_rate
+    learning_rate = args.lr
+    momentum = args.momentum
+    weight_decay = args.weight_decay
+    n_training_samples = args.n_training_samples
+    n_testing_samples = args.n_testing_samples
+    learning_rate_decay = args.lr_rate_decay
+    class_weights = None
+
+    # Model architecture
+    if args.dataset == 'higgs':
+        # Model architecture higgs
+        dimensions = (28, 1000, 1000, 1000, 2)
+        loss = 'cross_entropy'
+        weight_init = 'xavier'
+        activations = (Relu, Relu, Relu, Softmax)
+        X_train, Y_train, X_test, Y_test = load_higgs_data()
+    elif args.dataset == 'fashionmnist' or args.dataset == 'mnist':
+        # Model architecture mnist
+        dimensions = (784, 1000, 1000, 1000, 10)
+        loss = 'cross_entropy'
+        batch_size = 128
+        learning_rate = 0.01
+        epsilon = 20
+        weight_init = 'he_uniform'
+        #activations = (Relu, Relu, Relu, Softmax)
+        activations = (SparseAlternatedReLU(-0.5), SparseAlternatedReLU(0.5), SparseAlternatedReLU(-0.5), Softmax)
+        if args.dataset == 'fashionmnist':
+            X_train, Y_train, X_test, Y_test = load_fashion_mnist_data(60000, 10000)
+        else:
+            X_train, Y_train, X_test, Y_test = load_mnist_data(args.n_training_samples, args.n_testing_samples)
+    elif args.dataset == 'madalon':
+        # Model architecture madalon
+        dimensions = (500, 400, 100, 400, 1)
+        loss = 'mse'
+        activations = (Relu, Relu, Relu, Sigmoid)
+        X_train, Y_train, X_test, Y_test = load_madelon_data()
+    elif args.dataset == 'svhn':
+        # Model architecture svhn
+        dimensions = (3072, 4000, 1000, 4000, 10)
+        loss = 'cross_entropy'
+        activations = (Relu, Relu, Relu, Softmax)
+        X_train, Y_train, X_test, Y_test = load_svhn_data(args.n_training_samples, args.n_testing_samples)
+    elif args.dataset == 'cllsub111':
+        # Model architecture cllsub111
+        dimensions = (11340, 10000, 10000, 10000, 3)
+        loss = 'cross_entropy'
+        activations = (Relu, Relu, Relu, Softmax)
+        X_train, Y_train, X_test, Y_test = load_cll_sub_111_data()
+    elif args.dataset == 'gli85':
+        # Model architecture gli85
+        dimensions = (22283, 20000, 5000, 20000, 1)
+        loss = 'mse'
+        activations = (Relu, Relu, Relu, Sigmoid)
+        X_train, Y_train, X_test, Y_test = load_gli_85_data()
+    elif args.dataset == 'smkcan187':
+        # Model architecture smkcan187
+        dimensions = (22283, 20000, 5000, 20000, 1)
+        activations = (Relu, Relu, Relu, Sigmoid)
+        loss = 'mse'
+        X_train, Y_train, X_test, Y_test = load_smk_can_187_data()
+    elif args.dataset == 'orlraws10p':
+        # Model architecture orlraws10p
+        dimensions = (10304, 10000, 10000, 10000, 10)
+        loss = 'cross_entropy'
+        activations = (Relu, Relu, Relu, Softmax)
+        X_train, Y_train, X_test, Y_test = load_orlraws_10P_data()
+    elif args.dataset == 'leukemia':
+        batch_size = 5
+        learning_rate = 0.005
+        # Model architecture leukemia
+        dimensions = (54675, 27500, 5000, 27500, 18)
+
+        loss = 'cross_entropy_weighted'
+        dropout_rate = 0.3
+        weight_init = 'normal'
+        epsilon = 10
+        activations = (Relu, Relu, Relu, Softmax)
+        X_train, Y_train, X_test, Y_test = load_leukemia_data()
+        class_weights = class_weight.compute_class_weight('balanced', np.unique(Y_train), Y_train)
+        Y_train = np_utils.to_categorical(Y_train, 18)
+        Y_test = np_utils.to_categorical(Y_test, 18)
+
+    elif args.dataset == 'eurosat':
+        dimensions = (64 * 64 * 3, 10000, 5000, 10000, 10)
+        loss = 'cross_entropy'
+        epsilon = 10
+        batch_size = 64
+        learning_rate = 0.005
+        activations = (Relu, Relu, Relu, Softmax)
+        X_train, Y_train, X_test, Y_test = load_eurosat__data()
+    else:
+        # Model architecture cifar10
+        dimensions = (3072, 4000, 1000, 4000, 10)
+        weight_init = 'he_uniform'
+        loss = 'cross_entropy'
+        learning_rate = 0.01
+        batch_size=128
+        epsilon=20
+        activations = (SparseAlternatedReLU(-0.75), SparseAlternatedReLU(0.75), SparseAlternatedReLU(-0.75), Softmax)
+        if args.augmentation:
+            X_train, Y_train, X_test, Y_test = load_cifar10_data_not_flattened(50000, 10000)
+        else:
+            X_train, Y_train, X_test, Y_test = load_cifar10_data(50000, 10000)
+
+
     # SET parameters
     model_config = {
-        'batch_size': args.batch_size,
-        'dropout_rate': args.dropout_rate,
-        'seed': args.seed,
-        'zeta': args.zeta,
-        'epsilon': args.epsilon,
-        'loss': args.loss,
-        'weight_init': 'xavier'
+        'n_epochs': n_epochs,
+        'batch_size': batch_size,
+        'dropout_rate': dropout_rate,
+        'lr': learning_rate,
+        'zeta': zeta,
+        'epsilon': epsilon,
+        'momentum': momentum,
+        'weight_decay': 0.0,
+        'n_hidden_neurons': n_hidden_neurons,
+        'n_training_samples': n_training_samples,
+        'n_testing_samples': n_testing_samples,
+        'loss': loss,
+        'weight_init': weight_init,
+        'prune': prune
     }
 
     # Comment this if you would like to use the full power of randomization. I use it to have repeatable results.
-    np.random.seed(0)
+    np.random.seed(args.seed)
 
     comm = MPI.COMM_WORLD.Dup()
 
@@ -146,20 +239,13 @@ if __name__ == '__main__':
     num_workers = num_processes - 1
 
     # Initialize logger
-    base_file_name = "Experiments/relu_sgdm_sync_batch128_aug_set_mlp_mpi_higgs_" + str(args.epochs) + "_epochs_e" + \
-                    str(args.epsilon) + "_rand" + str(0) + "_num_workers_" + str(num_workers)
+    base_file_name = "ParallelResults/alrelu75_augmented_sgdm_no_pruning_async_batch128_set_mpi_"+ str(args.dataset)+"_" + str(args.epochs) + "_epochs_e" + \
+                    str(args.epsilon) + "_rand" + str(args.seed) + "_num_workers_" + str(num_workers)
     log_file = base_file_name + "_logs_execution.txt"
 
     save_filename = base_file_name + "_process_" + str(rank)
 
     initialize_logger(filename=log_file, file_level=args.log_level, stream_level=args.log_level)
-
-    # Load dataset
-    if args.augmentation:
-        X_train, Y_train, X_test, Y_test = load_cifar10_data_not_flattened(args.n_training_samples,
-                                                                           args.n_testing_samples)
-    else:
-        X_train, Y_train, X_test, Y_test = load_higgs_data()
 
     if num_processes == 1:
         validate_every = int(X_train.shape[0] // (args.batch_size * args.sync_every))
@@ -189,7 +275,7 @@ if __name__ == '__main__':
 
     # Scale up the learning rate for synchronous training
     if args.synchronous:
-        args.lr = args.lr * num_workers
+        args.lr = args.lr * (num_workers * 0.75)
 
     # Some input arguments may be ignored depending on chosen algorithm
     if args.mode == 'easgd':
@@ -208,19 +294,16 @@ if __name__ == '__main__':
     else:
         algo = Algo(optimizer='sgd', validate_every=validate_every, lr=args.lr, sync_every=args.sync_every)
 
-    # Model architecture
-    if args.dataset == 'higgs':
-        # Model architecture higgs
-        dimensions = (28, 1000, 1000, 1000, 2)
-    elif args.dataset == 'fashionmnist' or args.dataset == 'mnist':
-        # Model architecture mnist
-        dimensions = (784, 1000, 1000, 1000, 10)
-    else:
-        # Model architecture cifar10
-        dimensions = (3072, 4000, 1000, 4000, 10)
-
     # Instantiate SET model
-    model = SETMPIModel(dimensions, (Relu, Relu, Relu, Softmax), **model_config)
+    # Instantiate SET model
+    if rank == 0:
+        from models.set_mlp_mpi_master import *
+
+        model = SETMPIModel(dimensions, activations, class_weights=class_weights,**model_config)
+    else:
+        from models.set_mlp_mpi import *
+
+        model = SETMPIModel(dimensions, activations, class_weights=class_weights, **model_config)
 
     # Creating the MPIManager object causes all needed worker and master nodes to be created
     manager = MPIManager(comm=comm, data=data, algo=algo, model=model,
@@ -243,7 +326,7 @@ if __name__ == '__main__':
 
         logging.info("------------------------------------------------------------------------------------------------")
         logging.info("Final performance of the model on the test dataset")
-        manager.process.validate(manager.process.weights)
+        manager.process.validate()
 
     comm.barrier()
     logging.info("Terminating")

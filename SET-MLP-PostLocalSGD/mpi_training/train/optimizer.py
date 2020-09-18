@@ -64,7 +64,7 @@ class MomentumSGD(Optimizer):
         self.current_milestone = 0
         self.n_workers = n_workers
 
-    def apply_update(self, weights, gradient, epoch=0, sync=False, nesterov=False):
+    def apply_update(self, weights, gradient, epoch=0, sync=False, retain=False, nesterov=False):
         """Move weights in the direction of the gradient, by the amount of the
             learning rate."""
 
@@ -94,7 +94,7 @@ class MomentumSGD(Optimizer):
             dw = v[0]
             delta = v[1]
 
-            if not sync:
+            if not sync and retain:
                dw = retain_valid_updates(weights['w'][index], dw)
 
             # perform the update with momentum

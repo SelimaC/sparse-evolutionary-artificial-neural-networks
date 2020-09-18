@@ -1,11 +1,13 @@
 ### MPIWorker and MPIMaster classes
 
 import json
+import random
 import numpy as np
 import time
 import logging
 import datetime
 
+from scipy.sparse import coo_matrix, csr_matrix
 from mpi4py import MPI
 from mpi_training.train.monitor import Monitor
 from utils.load_data import Error
@@ -110,7 +112,7 @@ class MPIProcess(object):
     def check_sanity(self):
         """Throws an exception if any model attribute has not been set yet."""
         for par in ['model',
-                    'weights']:
+                    'update']:
             if not hasattr(self, par) or getattr(self, par) is None:
                 raise Error("%s not found!  Process %s does not seem to be set up correctly." % (par, self.ranks))
 
@@ -132,24 +134,17 @@ class MPIProcess(object):
         self.send_update(check_permission=True)
         t1 = datetime.datetime.now()
         self.time_step = self.recv_time_step()
-        self.weights = self.recv_weights()
+        self.model.set_weights(self.recv_weights())
         t2 = datetime.datetime.now()
         self.idle_time += (t2 - t1).total_seconds()
 
-        self.algo.set_worker_model_weights(self.model, self.weights, self.gradients)
+        #self.algo.set_worker_model_weights(self.model, self.weights, self.gradients)
         self.update = {}
 
-    def apply_update(self, sync=False):
+    def apply_update(self, sync=False, retain=False):
         """Updates weights according to update received from worker process"""
         with np.errstate(divide='raise', invalid='raise', over='raise'):
-            self.weights = self.algo.apply_update(self.weights, self.update, self.epoch)
-            self.model.set_weights(self.weights)
-
-    def average_model(self):
-        """Average model according to update received from worker process"""
-        with np.errstate(divide='raise', invalid='raise', over='raise'):
-            self.weights = self.algo.apply_update(self.weights, self.update, self.epoch)
-            self.model.set_weights(self.weights)
+            self.model.apply_update(self.update, self.epoch, sync, retain)
 
     ### MPI-related functions below ###
 
@@ -185,7 +180,7 @@ class MPIProcess(object):
             self.logger.error("Not found in tag dictionary: {0} -- returning None".format(name))
             return None
 
-    def recv(self, obj=None, tag=MPI.ANY_TAG, source=None, status=None, comm=None):
+    def recv(self, tag=MPI.ANY_TAG, source=None, status=None, comm=None):
         """ Wrapper around MPI.recv/Recv. Returns the received object.
             Params:
               obj: variable into which the received object should be placed
@@ -202,10 +197,7 @@ class MPIProcess(object):
         tag_num = self.lookup_mpi_tag(tag)
         # if tag in ['bool','time']:
         #    comm.Recv(obj, source=source, tag=tag_num, status=status )
-        #    return obj
-
-        obj = comm.recv(source=source, tag=tag_num, status=status)
-        return obj
+        return comm.recv(source=source, tag=tag_num, status=status)
 
     def send(self, obj, tag, dest=None, comm=None):
         """ Wrapper around MPI.send/Send.  Params:
@@ -257,7 +249,7 @@ class MPIProcess(object):
         if self.is_shadow(): return
         """Send NN weights to the process specified by comm (MPI communicator) and dest (rank).
             Before sending the weights we first send the tag 'begin_weights'."""
-        self.send_arrays(self.weights, expect_tag='begin_weights', tag='weights',
+        self.send_arrays(self.model.get_weights(), expect_tag='begin_weights', tag='weights',
                          comm=comm, dest=dest, check_permission=check_permission)
 
     def send_update(self, comm=None, dest=None, check_permission=False):
@@ -276,13 +268,13 @@ class MPIProcess(object):
         if self.is_shadow(): return
         self.send(obj=obj, tag='bool', dest=dest, comm=comm)
 
-    def recv_arrays(self, obj, tag, comm=None, source=None):
-        return self.recv(obj, tag, comm=comm, source=source)
+    def recv_arrays(self, tag, comm=None, source=None):
+        return self.recv(tag, comm=comm, source=source)
 
     def recv_weights(self, comm=None, source=None):
         """Receive NN weights layer by layer from the process specified by comm and source"""
         if self.is_shadow(): return
-        return self.recv_arrays(self.weights, tag='weights', comm=comm, source=source)
+        return self.recv_arrays(tag='weights', comm=comm, source=source)
 
     def recv_update(self, comm=None, source=None, add_to_existing=False):
         """Receive an update layer by layer from the process specified by comm and source.
@@ -290,8 +282,7 @@ class MPIProcess(object):
             otherwise overwrite the current update"""
         if self.is_shadow(): return
         if add_to_existing:
-            tmp = {}
-            tmp = self.recv_arrays(tmp, tag='update', comm=comm, source=source)
+            tmp = self.recv_arrays(tag='update', comm=comm, source=source)
 
             for index, v in tmp.items():
                 dw = v[0]
@@ -304,7 +295,7 @@ class MPIProcess(object):
                     self.update[index] = (self.update[index][0] + dw, self.update[index][1] + delta)
 
         else:
-            self.update = self.recv_arrays(self.update, tag='update', comm=comm, source=source)
+            self.update = self.recv_arrays(tag='update', comm=comm, source=source)
 
     def recv_time_step(self, comm=None, source=None):
         """Receive the current time step"""
@@ -326,7 +317,7 @@ class MPIProcess(object):
     def bcast_weights(self, comm, root=0):
         """Broadcast weights shape and weights (layer by layer)
             on communicator comm from the indicated root rank"""
-        self.bcast(self.weights, comm=comm, root=root)
+        self.bcast(self.model.get_weights(), comm=comm, root=root)
 
 
 class MPIWorker(MPIProcess):
@@ -391,15 +382,14 @@ class MPIWorker(MPIProcess):
         epoch = 0
         batches_per_epoch = self.data.get_train_data().shape[0] / self.data.batch_size
 
-        self.model.set_weights(self.weights)
+        #self.model.set_weights(self.weights)
 
         self.logger.info(f"Worker {self.rank} start training")
+        if self.monitor:
+            self.monitor.start_monitor()
 
         for x_b, y_b in self.data.generate_data():
             num_batches += 1
-            self.logger.info(f"Starting batch {num_batches}, now validate every is {self.algo.sync_every}")
-            if self.monitor:
-                self.monitor.start_monitor()
 
             if self.process_comm:
                 # broadcast the weights to all processes
@@ -408,6 +398,10 @@ class MPIWorker(MPIProcess):
                     self.model.set_weights(self.weights)
 
             tmp = self.model.train_on_batch(x=x_b, y=y_b)
+
+            if epoch > 350:
+                self.model.apply_update(tmp)
+
             if self.algo.sync_every > 1:
                 for index, v in tmp.items():
                     dw = v[0]
@@ -419,32 +413,47 @@ class MPIWorker(MPIProcess):
                         self.update[index] = (self.update[index][0] + dw, self.update[index][1] + delta)
             else:
                 self.update = tmp
-            if self.algo.should_sync():
+            if self.algo.should_sync() and epoch <= 350:
                 self.sync_with_parent()
-            self.logger.info(f"Finishing batch {num_batches}, now validate every is {self.algo.sync_every}")
 
             if num_batches % batches_per_epoch == 0:
-                self.logger.info("Finishing epoch {:d}".format(self.epoch + epoch))
-
-                if epoch > self.num_epochs:
-                    break
-
-                epoch += 1
-                if epoch >= 350:
-                    self.algo.sync_every = 4
-                elif epoch >= 200:
-                    self.algo.sync_every = 2
-                elif epoch == 1:
-                    self.algo.sync_every = self.rank
-                else:
-                    self.algo.sync_every = (self.algo.sync_every % 4) + 1
-
-                self.logger.info(f"Finishing epoch {epoch}, now validate every is {self.algo.sync_every}")
                 if self.monitor:
                     self.monitor.stop_monitor()
 
+                if epoch >= self.num_epochs:
+                    self.logger.info("Starting validation")
+                    t3 = datetime.datetime.now()
+                    accuracy_test, activations_test = self.model.predict(self.data.get_test_data(),
+                                                                         self.data.get_test_labels())
+                    t4 = datetime.datetime.now()
+                    loss_test = self.model.compute_loss(self.data.get_test_labels(), activations_test)
+                    self.logger.info("Final validation metrics worker:")
+                    self.logger.info(f"Testing time: {t4 - t3}\n; Loss test: {loss_test}; \n"
+                                     f" Accuracy test: {accuracy_test}; \n")
+                    self.logger.info("Sending final weights to master...")
+                    self.send_weights()
+                    self.logger.info("Final weights have been sent...")
+                    break
+
+                epoch += 1
+                if epoch > 350:
+                    self.algo.sync_every = 150
+                    self.model.weight_evolution(epoch)
+                else:
+                    self.algo.sync_every = 1
+
+                self.logger.info(f"Finishing epoch {epoch}, now validate every is {self.algo.sync_every}")
+
+                if self.monitor:
+                    self.monitor.start_monitor()
+
         self.logger.debug("Signing off")
         self.logger.info(f"Worker idle time: {self.idle_time}")
+        if (self.monitor and self.save_filename != ""):
+            with open(self.save_filename + "_monitor.json", 'w') as file:
+                file.write(json.dumps(self.monitor.get_stats(), indent=4, sort_keys=True, default=str))
+
+
 
         self.send_exit_to_parent()
 
@@ -483,7 +492,7 @@ class MPIMaster(MPIProcess):
 
     def __init__(self, parent_comm, parent_rank=None, child_comm=None,
                  num_epochs=1, data=None, algo=None, model=None,
-                 num_sync_workers=1,monitor=False, save_filename=None,):
+                 num_sync_workers=1, monitor=False, save_filename=None):
         """Parameters:
               child_comm: MPI communicator used to contact children"""
         if child_comm is None:
@@ -496,6 +505,8 @@ class MPIMaster(MPIProcess):
         self.best_val_acc = 0.
         self.weights_to_save = []
         self.biases_to_save = []
+        self.candidates = {}
+        self.averaged = False
 
         self.num_workers = child_comm.Get_size() - 1  # all processes but one are workers
         self.metrics = np.zeros((num_epochs + 1, 4))
@@ -540,6 +551,117 @@ class MPIMaster(MPIProcess):
         else:
             self.time_step += 1
 
+    @staticmethod
+    def find_first_pos(array, value):
+        idx = (np.abs(array - value)).argmin()
+        return idx
+
+    @staticmethod
+    def find_last_pos(array, value):
+        idx = (np.abs(array - value))[::-1].argmin()
+        return array.shape[0] - idx
+
+    def do_average_sequence(self, source):
+            self.logger.info(f"Processing model from {source}")
+            t1 = datetime.datetime.now()
+            self.waiting_workers_list.append(source)
+            t2 = datetime.datetime.now()
+            self.idle_time += (t2 - t1).total_seconds()
+            self.candidates[source] = self.recv_weights(source=source, comm=self.child_comm)
+
+            if len(self.candidates) == 5:
+                    self.logger.info("Master is averaging models...")
+                    self.new_weights = {'w': {}, 'b': {}, 'pdw': {}, 'pdd': {}}
+                    best_accuracy = 0
+                    for c, candidate in self.candidates.items():
+                        w = candidate['w']
+                        b = candidate['b']
+                        # self.logger.info(f"Validating worker {c}")
+                        # accuracy = self.validate(candidate)
+                        # if accuracy > best_accuracy:
+                        #     self.new_weights = candidate
+                        #     best_accuracy = accuracy
+
+
+                        for index, weights in w.items():
+
+                            if index not in self.new_weights['w']:
+                                self.new_weights['w'][index] = weights
+                            else:
+                                self.new_weights['w'][index] += weights
+
+                            # if index not in self.new_weights['w']:
+                            #     self.new_weights['w'][index] = weights
+                            # else:
+                            #     self.new_weights['w'][index] = csr_matrix.maximum(weights, self.new_weights['w'][index])
+
+                        for index, bias in b.items():
+                            if index not in self.new_weights['b']:
+                                self.new_weights['b'][index] = bias
+                            else:
+                                self.new_weights['b'][index] += bias
+
+                    for i, weight in self.new_weights['w'].items():
+                        self.new_weights['w'][i] = weight/5
+                        #self.logger.info(f"number of weights {self.new_weights['w'][i].count_nonzero()}")
+
+                    for i, bias in self.new_weights['b'].items():
+                        self.new_weights['b'][i] = bias/5
+                        #self.logger.info(f"number of biases {len(self.new_weights['b'][i])}")
+
+                    # self.logger.info(f"Weights before evolution")
+                    # self.logger.info(self.weights['w'][1].count_nonzero())
+                    # self.logger.info(self.weights['w'][2].count_nonzero())
+                    # self.logger.info(self.weights['w'][3].count_nonzero())
+                    # self.logger.info(self.weights['w'][4].count_nonzero())
+                    #
+                    # self.logger.info(f"new weights evolution")
+                    # self.logger.info(self.new_weights['w'][1].count_nonzero())
+                    # self.logger.info(self.new_weights['w'][2].count_nonzero())
+                    # self.logger.info(self.new_weights['w'][3].count_nonzero())
+                    # self.logger.info(self.new_weights['w'][4].count_nonzero())
+
+                    for i, weight in self.new_weights['w'].items():
+                        wcoo = weight.tocoo()
+                        vals_w = wcoo.data
+                        rows_w = wcoo.row
+                        cols_w = wcoo.col
+                        values = np.sort(weight.data)
+                        first_zero_pos = self.find_first_pos(values, 0)
+                        last_zero_pos = self.find_last_pos(values, 0)
+
+                        n_w_to_delete = self.new_weights['w'][i].count_nonzero() - self.weights['w'][i].count_nonzero()
+                        zeta = n_w_to_delete/self.new_weights['w'][i].count_nonzero()
+                        self.logger.info(f"Number of weights {self.new_weights['w'][i].count_nonzero()}")
+                        self.logger.info(f"Number of new weights {self.weights['w'][i].count_nonzero()}")
+                        self.logger.info(f"Number of weights to be removed {n_w_to_delete}")
+                        self.logger.info(f"Percentual of weights to be removed {zeta}")
+
+                        largest_negative = values[int((1 - zeta) * first_zero_pos)]
+                        smallest_positive = values[
+                            int(min(values.shape[0] - 1,
+                                    last_zero_pos + zeta * (values.shape[0] - last_zero_pos)))]
+                        vals_w_new = vals_w[(vals_w > smallest_positive) | (vals_w < largest_negative)]
+                        rows_w_new = rows_w[(vals_w > smallest_positive) | (vals_w < largest_negative)]
+                        cols_w_new = cols_w[(vals_w > smallest_positive) | (vals_w < largest_negative)]
+
+                        self.new_weights['w'][i] = coo_matrix((vals_w_new, (rows_w_new, cols_w_new)),
+                                               (weight.shape)).tocsr()
+
+                    self.model.set_weights(self.new_weights)
+                    self.weights = self.model.get_weights()
+
+                    self.validate()
+                    self.logger.info(f"Master epoch {self.epoch}, timestep {self.time_step}")
+                    self.candidates = {}
+                    self.averaged = True
+                    self.logger.info(f"Final number of weights")
+                    self.logger.info(self.weights['w'][1].count_nonzero())
+                    self.logger.info(self.weights['w'][2].count_nonzero())
+                    self.logger.info(self.weights['w'][3].count_nonzero())
+                    self.logger.info(self.weights['w'][4].count_nonzero())
+
+
     def do_update_sequence(self, source):
         """Update procedure:
          -Compute the staleness of the update and decide whether to accept it.
@@ -568,16 +690,17 @@ class MPIMaster(MPIProcess):
 
                     if self.algo.validate_every > 0 and self.time_step > 0:
                         if self.time_step % self.algo.validate_every == 0:
-                            self.weights_to_save.append(self.weights['w'])
-                            self.biases_to_save.append(self.weights['b'])
-
-                            self.validate(self.weights)
+                            # self.weights_to_save.append(self.weights['w'])
+                            # self.biases_to_save.append(self.weights['b'])
+                            self.logger.info("Start validation")
+                            self.validate()
                             if self.epoch < self.num_epochs // self.num_workers - 1:
                                 t5 = datetime.datetime.now()
                                 self.logger.info(self.weights['w'][1].count_nonzero())
                                 self.logger.info(self.weights['w'][2].count_nonzero())
                                 self.logger.info(self.weights['w'][3].count_nonzero())
                                 self.logger.info(self.weights['w'][4].count_nonzero())
+                                self.logger.info("Start weight evolution")
                                 self.model.model.weights_evolution_III()
                                 t6 = datetime.datetime.now()
                                 self.logger.info(f"Weights evolution time  {t6 - t5}")
@@ -586,23 +709,35 @@ class MPIMaster(MPIProcess):
                             self.weights = self.model.get_weights()
                             self.logger.info(f"Master epoch {self.epoch + 1}")
                 else:
-                    self.logger.info("suujvchsdj")
-                    self.apply_update(sync=self.is_synchronous())
-                    self.logger.info("cccc")
+                    if len(self.evolution_workers_list) != 0 and not self.is_synchronous():
+                        retain = True
+                        if source in self.evolution_workers_list:
+                            self.evolution_workers_list.remove(source)
+                    else:
+                        retain = False
+                    self.apply_update(sync=self.is_synchronous(), retain=retain)
                     if self.is_synchronous():
                         self.update = {}
+                    self.logger.debug(f"Update {self.time_step}")
 
                     if self.algo.validate_every > 0 and self.time_step > 0:
                         if self.time_step % self.algo.validate_every == 0:
-                            self.weights_to_save.append(self.weights['w'])
-                            self.biases_to_save.append(self.weights['b'])
 
-                            self.validate(self.weights)
+                            self.validate()
+                            # self.weights_to_save.append(self.weights['w'])
+                            # self.biases_to_save.append(self.weights['b'])
                             self.epoch += 1
                             if self.epoch < self.num_epochs - 1:
                                 t5 = datetime.datetime.now()
-                                self.model.weight_evolution()
+                                self.logger.info("Start evolution")
+
+                                self.model.weight_evolution(self.epoch)
+                                if not self.is_synchronous():
+                                    self.evolution_workers_list = list(range(1, self.num_workers+1))
+                                    self.evolution_workers_list.remove(source)
+
                                 t6 = datetime.datetime.now()
+                                self.logger.info(self.evolution_workers_list)
                                 self.logger.info(f"Weights evolution time  {t6 - t5}")
                                 self.evolution_time += (t6 - t5).seconds
                                 self.weights = self.model.get_weights()
@@ -611,6 +746,7 @@ class MPIMaster(MPIProcess):
 
                     self.sync_parent()
                     self.sync_children()
+
         else:
             self.sync_child(source)
 
@@ -628,7 +764,7 @@ class MPIMaster(MPIProcess):
         self.time_step += 1
         if self.algo.validate_every > 0 and self.time_step > 0:
             if self.time_step % self.algo.validate_every == 0:
-                self.validate(self.weights)
+                self.validate()
                 self.epoch += 1
 
     def do_worker_finish_sequence(self, worker_id):
@@ -652,6 +788,9 @@ class MPIMaster(MPIProcess):
                 self.do_gem_update_sequence(source)
             else:
                 self.do_update_sequence(source)
+        elif tag == 'begin_weights':
+            self.logger.info("Master is starting last average sequence...")
+            self.do_average_sequence(source)
         elif tag == 'begin_gem':
             self.do_gem_sequence(source)
         elif tag == 'exit':
@@ -680,11 +819,9 @@ class MPIMaster(MPIProcess):
         status = MPI.Status()
         self.running_workers = list(range(1, self.num_workers + 1))
         self.waiting_workers_list = []
+        self.evolution_workers_list = []
 
         self.logger.info("Master initialize training")
-
-        if self.monitor:
-            self.monitor.start_monitor()
 
         while self.running_workers:
             t1 = datetime.datetime.now()
@@ -693,11 +830,12 @@ class MPIMaster(MPIProcess):
             self.idle_time += (t2 - t1).total_seconds()
             self.process_message(status)
 
-            if self.stop_training:
+            if self.averaged == True:
                 self.shut_down_workers()
 
-        if self.monitor:
-            self.monitor.stop_monitor()
+        # save performance metrics values in a file
+        if self.save_filename != "":
+            np.savetxt(self.save_filename + ".txt", self.metrics)
 
         np.savez_compressed(self.save_filename + "_weights.npz", *self.weights_to_save)
         np.savez_compressed(self.save_filename + "_biases.npz", *self.biases_to_save)
@@ -708,29 +846,20 @@ class MPIMaster(MPIProcess):
         # (this happens if the batch size does not divide the dataset size)
         if self.epoch < self.num_epochs:
             self.epoch += 1
-            self.validate(self.weights)
-
-        if (self.monitor and self.save_filename != ""):
-            with open(self.save_filename + "_monitor.json", 'w') as file:
-                file.write(json.dumps(self.monitor.get_stats(), indent=4, sort_keys=True, default=str))
+            self.validate()
 
         self.send_exit_to_parent()
         self.stop_time = time.time()
 
-    def validate(self, weights):
-        return self.validate_aux(weights, self.model)
-
     def test(self, weights):
         return self.test_aux(weights, self.model)
 
-    def validate_aux(self, weights, model):
+    def validate(self):
         """Compute the loss on the validation data.
             Return a dictionary of validation metrics."""
         if self.has_parent:
             return {}
-        model.set_weights(weights)
-
-        self.logger.debug("Starting validation")
+        self.logger.info("Starting validation")
         t3 = datetime.datetime.now()
         accuracy_test, activations_test = self.model.predict(self.data.get_test_data(), self.data.get_test_labels())
         accuracy_train, activations_train = self.model.predict(self.data.get_train_data(), self.data.get_train_labels())
@@ -749,10 +878,6 @@ class MPIMaster(MPIProcess):
                           f"Maximum accuracy val: {self.best_val_acc}")
 
         self.validate_time += (t4 - t3).seconds
-
-        # save performance metrics values in a file
-        if self.save_filename != "":
-            np.savetxt(self.save_filename + ".txt", self.metrics)
 
         self.logger.debug("Ending validation")
         return None

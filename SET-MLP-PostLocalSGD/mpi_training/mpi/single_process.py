@@ -22,7 +22,7 @@ class MPISingleWorker(MPIWorker):
         weights = []
         biases = []
 
-        maximum_accuracy = 0
+        self.maximum_accuracy = 0
         metrics = np.zeros((self.num_epochs, 4))
         for epoch in range(1, self.num_epochs + 1):
             logging.info("beginning epoch {:d}".format(self.epoch + epoch))
@@ -35,9 +35,7 @@ class MPISingleWorker(MPIWorker):
                 batch = self.data.x_train[start_pos:end_pos], self.data.y_train[start_pos:end_pos]
                 self.update = self.model.train_on_batch(x=batch[0], y=batch[1])
 
-                self.weights = self.algo.apply_update(self.weights, self.update, epoch)
-                self.algo.set_worker_model_weights(self.model, self.weights)
-                self.weights = self.model.get_weights()
+                self.model.apply_update(self.update)
 
             if self.monitor:
                 self.monitor.stop_monitor()
@@ -47,7 +45,7 @@ class MPISingleWorker(MPIWorker):
                 accuracy_test, activations_test = self.model.predict(self.data.x_test, self.data.y_test)
                 accuracy_train, activations_train = self.model.predict(self.data.x_train, self.data.y_train)
                 t4 = datetime.datetime.now()
-                maximum_accuracy = max(maximum_accuracy, accuracy_test)
+                self.maximum_accuracy = max(self.maximum_accuracy, accuracy_test)
                 loss_test = self.model.compute_loss(self.data.y_test, activations_test)
                 loss_train = self.model.compute_loss(self.data.y_train, activations_train)
                 metrics[epoch-1, 0] = loss_train
@@ -56,7 +54,7 @@ class MPISingleWorker(MPIWorker):
                 metrics[epoch-1, 3] = accuracy_test
                 self.logger.info(f"Testing time: {t4 - t3}\n; Loss train: {loss_train}; Loss test: {loss_test}; \n"
                                  f"Accuracy train: {accuracy_train}; Accuracy test: {accuracy_test}; \n"
-                                 f"Maximum accuracy test: {maximum_accuracy}")
+                                 f"Maximum accuracy test: {self.maximum_accuracy}")
                 # save performance metrics values in a file
                 if self.save_filename != "":
                     np.savetxt(self.save_filename + ".txt", metrics)
@@ -64,15 +62,13 @@ class MPISingleWorker(MPIWorker):
             if self.stop_training:
                 break
 
-            weights.append(self.weights['w'])
-            biases.append(self.weights['b'])
+            weights.append(self.model.get_weights()['w'])
+            biases.append(self.model.get_weights()['b'])
             if epoch < self.num_epochs - 1:  # do not change connectivity pattern after the last epoch
-                self.model.weight_evolution()
+                self.model.weight_evolution(epoch)
                 self.weights = self.model.get_weights()
 
         logging.info("Signing off")
-        self.model.set_weights(self.weights)
-
         np.savez_compressed(self.save_filename + "_weights.npz", *weights)
         np.savez_compressed(self.save_filename + "_biases.npz", *biases)
 
@@ -80,8 +76,14 @@ class MPISingleWorker(MPIWorker):
             with open(self.save_filename + "_monitor.json", 'w') as file:
                 file.write(json.dumps(self.monitor.get_stats(), indent=4, sort_keys=True, default=str))
 
-    def test(self, weights):
-        return MPIMaster.test_aux(self, weights, self.model)
-
-    def validate(self, weights):
-        return MPIMaster.validate_aux(self, weights, self.model)
+    def validate(self):
+        t3 = datetime.datetime.now()
+        accuracy_test, activations_test = self.model.predict(self.data.x_test, self.data.y_test)
+        accuracy_train, activations_train = self.model.predict(self.data.x_train, self.data.y_train)
+        t4 = datetime.datetime.now()
+        self.maximum_accuracy = max(self.maximum_accuracy, accuracy_test)
+        loss_test = self.model.compute_loss(self.data.y_test, activations_test)
+        loss_train = self.model.compute_loss(self.data.y_train, activations_train)
+        self.logger.info(f"Testing time: {t4 - t3}\n; Loss train: {loss_train}; Loss test: {loss_test}; \n"
+                         f"Accuracy train: {accuracy_train}; Accuracy test: {accuracy_test}; \n"
+                         f"Maximum accuracy test: {self.maximum_accuracy}")

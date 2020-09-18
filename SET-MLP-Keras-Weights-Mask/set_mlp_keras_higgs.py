@@ -101,10 +101,10 @@ def createWeightsMask(epsilon,noRows, noCols):
 class SET_MLP_HIGGS:
     def __init__(self):
         # set model parameters
-        self.epsilon = 20  # control the sparsity level as discussed in the paper
+        self.epsilon = 10  # control the sparsity level as discussed in the paper
         self.zeta = 0.3  # the fraction of the weights removed
         self.batch_size = 128  # batch size
-        self.maxepoches = 1000  # number of epochs
+        self.maxepoches = 500  # number of epochs
         self.learning_rate = 0.01  # SGD learning rate
         self.num_classes = 2  # number of classes
         self.momentum = 0.9  # SGD momentum
@@ -136,14 +136,14 @@ class SET_MLP_HIGGS:
 
         # create a SET-MLP model for CIFAR10 with 3 hidden layers
         self.model = Sequential()
-        self.model.add(Dense(1000, name="sparse_1",kernel_constraint=MaskWeights(self.wm1),weights=self.w1, input_shape=(28,)))
-        self.model.add(ReLU(name="srelu1",weights=self.wSRelu1))
+        self.model.add(Dense(1000, kernel_initializer='normal', name="sparse_1",kernel_constraint=MaskWeights(self.wm1),weights=self.w1, input_shape=(28,)))
+        self.model.add(SReLU(name="srelu1",weights=self.wSRelu1))
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(1000, name="sparse_2",kernel_constraint=MaskWeights(self.wm2),weights=self.w2))
-        self.model.add(ReLU(name="srelu2",weights=self.wSRelu2))
+        self.model.add(Dense(1000, kernel_initializer='normal', name="sparse_2",kernel_constraint=MaskWeights(self.wm2),weights=self.w2))
+        self.model.add(SReLU(name="srelu2",weights=self.wSRelu2))
         self.model.add(Dropout(0.3))
-        self.model.add(Dense(1000, name="sparse_3",kernel_constraint=MaskWeights(self.wm3),weights=self.w3))
-        self.model.add(ReLU(name="srelu3",weights=self.wSRelu3))
+        self.model.add(Dense(1000, kernel_initializer='normal', name="sparse_3",kernel_constraint=MaskWeights(self.wm3),weights=self.w3))
+        self.model.add(SReLU(name="srelu3",weights=self.wSRelu3))
         self.model.add(Dropout(0.3))
         self.model.add(Dense(2,  name="dense_4",activation='softmax'))
 
@@ -298,6 +298,12 @@ class SET_MLP_HIGGS:
         y_train = np_utils.to_categorical(y_train, 2)
         y_test = np_utils.to_categorical(y_test, 2)
 
+        # normalize data
+        xTrainMean = np.mean(x_train, axis=0)
+        xTtrainStd = np.std(x_train, axis=0)
+        x_train = (x_train - xTrainMean) / xTtrainStd
+        x_test = (x_test - xTrainMean) / xTtrainStd
+
         return [x_train, y_train, x_test, y_test]
 
 if __name__ == '__main__':
@@ -307,7 +313,7 @@ if __name__ == '__main__':
 
     # save accuracies over for all training epochs
     # in "results" folder you can find the output of running this file
-    np.savetxt("results/set_new_version_mlp_srelu_sgd_higgs_acc.txt", np.asarray(model.accuracies_per_epoch))
+    np.savetxt("results/set_keras_srelu_sgd_higgs_acc.txt", np.asarray(model.accuracies_per_epoch))
 
 
 

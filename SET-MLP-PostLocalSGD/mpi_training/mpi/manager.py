@@ -167,6 +167,7 @@ class MPIManager(object):
                                          model=self.model,
                                          child_comm=child_comm,
                                          num_epochs=self.num_epochs,
+                                         monitor=self.monitor,
                                          num_sync_workers=num_sync_workers,
                                          save_filename=self.save_filename
                                 )
